@@ -1,0 +1,10 @@
+AGENTS*
+node_modules/
+dist/
+*.tgz
+.hippocampus/*.sqlite
+.hippocampus/*.sqlite-*
+.hippocampus/local.json
+.hippocampus/*.bak
+.env
+.env.*

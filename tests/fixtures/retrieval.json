@@ -1,0 +1,24 @@
+{
+  "memories": [
+    {
+      "kind": "decision",
+      "content": "Refresh token rotation requires a transaction"
+    },
+    {
+      "kind": "decision",
+      "content": "SQLite locking uses bounded busy timeouts"
+    },
+    { "kind": "decision", "content": "CSS layout uses grid columns" },
+    {
+      "kind": "episode",
+      "content": "Refresh token rotation once used an unsafe cache",
+      "expiresAt": "2000-01-01T00:00:00.000Z"
+    }
+  ],
+  "tasks": [
+    { "query": "refresh token", "relevant": [0] },
+    { "query": "SQLite locking", "relevant": [1] },
+    { "query": "CSS layout", "relevant": [2] },
+    { "query": "gardening flowers", "relevant": [] }
+  ]
+}

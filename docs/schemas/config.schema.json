@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "type": "number", "const": 1 },
+    "projectId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "provider": { "type": "string", "const": "sqlite" },
+        "sqlite": {
+          "type": "object",
+          "properties": { "path": { "type": "string", "minLength": 1 } },
+          "required": ["path"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["provider", "sqlite"],
+      "additionalProperties": false
+    },
+    "retrieval": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "const": "lexical" },
+        "maxContextTokens": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 10000
+        },
+        "vector": {
+          "type": "object",
+          "properties": { "provider": { "type": "string", "const": "none" } },
+          "required": ["provider"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["mode", "maxContextTokens", "vector"],
+      "additionalProperties": false
+    },
+    "embeddings": {
+      "type": "object",
+      "properties": { "provider": { "type": "string", "const": "none" } },
+      "required": ["provider"],
+      "additionalProperties": false
+    },
+    "capture": {
+      "type": "object",
+      "properties": { "mode": { "type": "string", "const": "explicit" } },
+      "required": ["mode"],
+      "additionalProperties": false
+    },
+    "privacy": {
+      "type": "object",
+      "properties": { "telemetry": { "type": "boolean", "const": false } },
+      "required": ["telemetry"],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "storage",
+    "retrieval",
+    "embeddings",
+    "capture",
+    "privacy"
+  ],
+  "additionalProperties": false
+}

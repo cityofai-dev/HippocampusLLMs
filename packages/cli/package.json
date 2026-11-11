@@ -1,0 +1,21 @@
+{
+  "name": "@hippocampusllms/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local project memory for coding agents",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "hippocampus": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}
