@@ -2,7 +2,25 @@
   "name": "@hippocampusllms/cli",
   "version": "0.1.0",
   "type": "module",
-  "description": "Local project memory for coding agents",
+  "description": "Local-first project memory for coding agents, with SQLite storage, selective lexical recall, a CLI, and an MCP server for Claude Code and Codex.",
+  "keywords": [
+    "coding-agents",
+    "project-memory",
+    "mcp",
+    "sqlite",
+    "claude-code",
+    "codex",
+    "cli"
+  ],
+  "homepage": "https://github.com/cityofai-dev/HippocampusLLMs#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cityofai-dev/HippocampusLLMs.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/cityofai-dev/HippocampusLLMs/issues"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=24"

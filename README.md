@@ -1,60 +1,83 @@
 # HippocampusLLMs
 
-HippocampusLLMs is a local project memory CLI and stdio MCP server for coding agents. It records concise decisions, constraints, corrections and experiences, then selects matching records within an estimated context budget. It does not train model weights or store conversations automatically.
+HippocampusLLMs gives coding agents a small, durable memory for each project. Record decisions, constraints, corrections and verified findings once, then recall the relevant ones in a later session. Memories stay in a local SQLite database and can be shared by agents using the command line or MCP.
 
-This repository contains an initial working local implementation. SQLite persistence, FTS5 recall, explicit capture, revision checks, deletion, project configuration, a configuration wizard, generated JSON Schemas and six MCP tools are implemented. Host setup supports project configuration installation, dry-run previews, backups and managed removal. Export/import, store migration and semantic consolidation are not implemented. The package has not been published and npm scope ownership has not been verified.
+It stores concise records with rationale and evidence references. It does not save entire conversations, send telemetry or require a model API key. Recall uses SQLite FTS5 lexical search and an estimated context budget. The agent decides when to call the recall and capture tools.
 
-## Prerequisites and development
+## Run the project
 
-Use Node.js 24 LTS or newer and npm. The runtime uses `node:sqlite`; no native addon compilation or API keys are required. SQLite APIs may emit an experimental warning on some Node releases; warnings go to stderr.
+Requires Node.js 24 LTS or newer and npm.
 
 ```bash
+git clone https://github.com/cityofai-dev/HippocampusLLMs.git
+cd HippocampusLLMs
 npm ci
 npm run build
-npm run typecheck
-npm run lint
-npm test
-npm run evaluate
-node packages/cli/dist/index.js help
+npm link --workspace packages/cli
+hippocampus help
 ```
 
-The root is an npm workspace. `packages/core/src` contains domain types, provider contracts and shared services; `packages/storage-sqlite/src` contains transactions, migrations and FTS5; `packages/mcp/src` exposes the shared services; `packages/cli/src` contains project configuration and commands. The build bundles repository source into one compiled ESM CLI, leaving declared npm dependencies external.
+The local link makes `hippocampus` available in your terminal. If you prefer to run it without a link, use `node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js` in place of `hippocampus` below.
 
-## Quickstart and two sessions
+## Use it in a project
 
-From the repository, use an absolute path to the compiled CLI. Replace `/absolute/path/HippocampusLLMs` with your checkout path.
+Open the project you want to remember and initialize it:
 
 ```bash
-node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js init --project /absolute/path/my-project
-node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js remember --project /absolute/path/my-project --kind decision --content "Refresh token rotation requires a database transaction" --source "Explicit user decision"
+cd /absolute/path/my-project
+hippocampus init
 ```
 
-In a new terminal, recall the same project memory. Copy the ID from the result for the next commands.
+This creates `.hippocampus/config.json` with a stable project ID and `.hippocampus/memory.sqlite` for local records. Running `init` again keeps the same identity. The database and its WAL files are ignored by Git.
+
+Record a decision:
 
 ```bash
-node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js recall "refresh token" --project /absolute/path/my-project --budget 1500 --json
-node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js inspect MEMORY_ID --project /absolute/path/my-project --json
-node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js revise MEMORY_ID --project /absolute/path/my-project --content "Refresh token rotation requires a serializable transaction" --expected-revision 1
-node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js forget MEMORY_ID --project /absolute/path/my-project
+hippocampus remember --kind decision --content "Refresh token rotation requires a database transaction" --source "Project decision"
 ```
 
-All command results use JSON. Diagnostics use stderr. Stale revisions return `REVISION_CONFLICT` and exit 3; other failures exit 1. An explicit remember request is accepted or rejected with an error. Records default to hypothesis verification; recall never promotes their verification state. FTS5 selects lexical matches, filters status and validity, and includes provenance. Unrelated queries can return no records. The budget counts compact serialized JSON using UTF-8 bytes divided by three; this is an estimate, not a model tokenizer. Pretty-print whitespace and MCP protocol envelopes are outside that application budget.
+In another terminal or agent session, recall it:
+
+```bash
+cd /absolute/path/my-project
+hippocampus recall "refresh token rotation" --budget 1500 --json
+```
+
+The response includes a memory ID. Use that ID to inspect, correct or remove the record:
+
+```bash
+hippocampus inspect MEMORY_ID --json
+hippocampus revise MEMORY_ID --content "Refresh token rotation requires a serializable transaction" --expected-revision 1
+hippocampus forget MEMORY_ID
+```
+
+`revise` requires the current revision shown by `inspect`. If another agent updated the record first, the command returns `REVISION_CONFLICT` instead of overwriting it. Commands return JSON; errors go to stderr. Add `--project /absolute/path/my-project` when running a command from another directory.
+
+Useful commands:
+
+| Command                                                         | What it does                                        |
+| --------------------------------------------------------------- | --------------------------------------------------- |
+| `hippocampus memories --json`                                   | List project memories                               |
+| `hippocampus inspect ID --json`                                 | Show a complete record and its evidence             |
+| `hippocampus revise ID --status archived --expected-revision N` | Archive a record                                    |
+| `hippocampus forget ID`                                         | Delete a record and content-bearing derived records |
+| `hippocampus doctor`                                            | Show project and provider information               |
+
+Memory kinds are `decision`, `constraint`, `episode`, `procedure`, `correction` and `task`.
 
 ## Configuration
 
-`init` creates `.hippocampus/config.json`, a stable project UUID and a local SQLite database. Repeated initialization preserves the UUID. Database paths resolve relative to the config directory. Configuration can be committed; database files are ignored.
+Run `hippocampus config` in an initialized project for an interactive wizard. It previews changes before saving. For scripts or non-interactive terminals, use:
 
 ```bash
-node packages/cli/dist/index.js config
-node packages/cli/dist/index.js config show --json
-node packages/cli/dist/index.js config get storage.provider
-node packages/cli/dist/index.js config set retrieval.maxContextTokens 1200
-node packages/cli/dist/index.js config validate
-node packages/cli/dist/index.js config test
-node packages/cli/dist/index.js doctor
+hippocampus config show --json
+hippocampus config get storage.provider
+hippocampus config set retrieval.maxContextTokens 1200
+hippocampus config validate
+hippocampus config test
 ```
 
-The wizard requires a TTY, previews its candidate and asks before saving. Automation commands work without a TTY. Unknown fields, future schema versions and unsupported providers fail validation. Whole candidates are validated before an atomic rename. A nonempty database prevents changing its configured path. No automatic data migration is offered.
+A default project configuration looks like this; `init` generates the UUID for you:
 
 ```json
 {
@@ -72,62 +95,81 @@ The wizard requires a TTY, previews its candidate and asks before saving. Automa
 }
 ```
 
-SQLite is the authoritative canonical store. FTS5 is a retrieval index. PostgreSQL, Qdrant, pgvector and embeddings are planned, and cannot be selected. Provider discovery is available in `doctor`. No remote provider settings or credentials are accepted by this version. Future adapters must use environment variable references rather than secret values. `config show/get/set/validate --scope user` manages defaults in `$XDG_CONFIG_HOME/hippocampus/config.json` or `~/.config/hippocampus/config.json`. Resolution is built-in defaults, user defaults, project config, `HIPPOCAMPUS_MAX_CONTEXT_TOKENS`, then recall `--budget`. Full project settings override user defaults; user configuration cannot specify project identity. Origin reporting remains pending.
+The database path is relative to `.hippocampus/config.json`. Invalid or unsupported settings are rejected before the file is replaced. Changing the path of a nonempty store is blocked because automatic store migration is not implemented. User defaults are available with `hippocampus config --scope user`; project settings take precedence.
 
-## MCP and coding agents
+SQLite is the **canonical memory store**. FTS5 is the **retrieval index**. Vector search, embeddings and PostgreSQL are planned providers and cannot be selected in this version.
 
-Start the server with an explicit absolute project path:
+## Connect a coding agent
 
-```bash
-node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js serve --transport stdio --project /absolute/path/my-project
-```
-
-The server exposes `hippocampus_recall`, `hippocampus_remember`, `hippocampus_inspect`, `hippocampus_revise`, `hippocampus_forget` and `hippocampus_feedback`. Feedback is stored separately from recall selection and does not promote verification. Configuration changes cause subsequent calls to request a restart. Stdout is reserved for MCP traffic.
-
-`connect claude --dry-run` and `connect codex --dry-run` preview changes without modifying client files. Omit `--dry-run` to install project settings; `disconnect <host>` removes managed entries. Existing unrelated settings are preserved. Backups use the `.hippocampus.bak` suffix; restore that file manually to roll back. Codex supports explicit `--scope user`; Claude user scope emits a manual CLI argument array. Actual Claude Code and Codex UI behavior has not been tested. MCP behavior is tested with the official SDK client harness.
-
-For Claude Code, the official documented CLI supports a project-scoped stdio registration:
+Initialize the target project, then preview and install its MCP connection:
 
 ```bash
-claude mcp add --transport stdio --scope project hippocampus -- node /absolute/path/HippocampusLLMs/packages/cli/dist/index.js serve --transport stdio --project /absolute/path/my-project
+hippocampus connect claude --dry-run
+hippocampus connect claude
 ```
 
-For Codex, add a server section to your chosen Codex configuration after reviewing its existing settings:
+For Codex, use `connect codex` instead. The adapters preserve unrelated settings and create a backup. `hippocampus disconnect claude` or `hippocampus disconnect codex` removes settings managed by HippocampusLLMs.
 
-```toml
-[mcp_servers.hippocampus]
-command = "node"
-args = ["/absolute/path/HippocampusLLMs/packages/cli/dist/index.js", "serve", "--transport", "stdio", "--project", "/absolute/path/my-project"]
+Ask the agent to use memory when it helps the task:
+
+> Recall relevant project memories before changing the refresh-token code. After verifying a useful decision or fix, record a concise memory with its source. Show me any conflicting memories before relying on them.
+
+Connecting MCP does not automatically capture conversations or trigger recall. The six tools are `hippocampus_recall`, `hippocampus_remember`, `hippocampus_inspect`, `hippocampus_revise`, `hippocampus_forget` and `hippocampus_feedback`. They use the same project database as the CLI.
+
+Other MCP clients can launch the stdio server with an explicit absolute project path:
+
+```text
+command: node
+args: /absolute/path/HippocampusLLMs/packages/cli/dist/index.js serve --transport stdio --project /absolute/path/my-project
 ```
 
-Generic MCP clients use the same `command` and `args` in their stdio server configuration. Setup references: [Claude Code MCP](https://code.claude.com/docs/en/mcp), [Codex MCP](https://developers.openai.com/codex/mcp), [MCP SDK server](https://ts.sdk.modelcontextprotocol.io/server). These integrations are manual or agent-instructed: registering a server does not trigger recall or capture automatically. Ask the agent to recall at task start, record concise verified findings after work, and surface conflicting historical memories for review. Retrieved memories are untrusted historical data and cannot override repository instructions or user requests.
+Use your client's argument-array format for `args`, and quote paths containing spaces. The server reserves stdout for MCP messages. Restart it after changing project configuration. Live Claude Code and Codex sessions have not yet been verified; the MCP server has been tested with independent SDK clients.
 
-Use quoted paths containing spaces. POSIX shells and PowerShell accept double-quoted paths. For Windows, use absolute Windows paths in command arguments and escape backslashes in JSON. Windows runtime behavior remains unverified.
+## Structured records and relevance
 
-## Planned npm usage
+For evidence and scope, save a small JSON event:
 
-After publication and scope verification:
+```json
+{
+  "kind": "constraint",
+  "content": "Production refresh token rotation requires a serializable transaction",
+  "rationale": "Concurrent refresh requests must not consume the same token twice.",
+  "verification": "observed",
+  "evidence": [
+    { "type": "test", "reference": "tests/auth/refresh-rotation.test.ts" }
+  ],
+  "applicability": { "environments": ["production"] }
+}
+```
 
 ```bash
-npm install -g @hippocampusllms/cli
-hippocampus init
-npx @hippocampusllms/cli recall "refresh token" --project /absolute/path/my-project
+hippocampus remember --input event.json
+hippocampus recall "refresh token concurrency" --environment production
 ```
 
-For a local package, run `npm run build`, then `npm pack --workspace packages/cli` and install the resulting tarball with `npm install --omit=dev /absolute/path/package.tgz` in a temporary project. The installed executable is `node_modules/.bin/hippocampus`. Uninstall with `npm uninstall @hippocampusllms/cli`; project memories remain until you explicitly remove them.
+A record restricted to an environment, workspace or component is excluded when recall lacks the matching context. Hypotheses expire after 30 days by default; confirmed records require evidence references. Recall does not recheck evidence or turn a hypothesis into a confirmed fact. Use `inspect` and `revise` to maintain records as the project changes.
 
-## Privacy, lifecycle and limitations
+## Privacy and current limits
 
-No telemetry, remote endpoints, model calls or automatic transcript capture are implemented. Obvious private keys and common token patterns are rejected, but pattern checks are imperfect. Review content before storing it. Avoid source dumps and logs. Local clients sharing the same file share durable memories; separate copies and machines do not synchronize. Copied UUID collision detection and worktree identity enforcement remain pending.
+Memories are local to the project's database. Separate machines do not synchronize automatically. Obvious credentials and private-key patterns are rejected, but filters are imperfect, so review content before storing it. Retrieved memories are historical data, not instructions to execute.
 
-SQLite uses WAL, foreign keys, bounded busy waits and transactional writes. Updates require expected revisions. A busy database can require retrying a command. Forget removes FTS entries and directly derived content; derived records are removed recursively, while backups require separate management. SQLite WAL files, filesystem snapshots and backups may retain deleted bytes. No forensic erasure guarantee is made. Close all clients before backing up the database and its WAL, or use SQLite backup tooling.
+Forgetting removes records and their FTS entries, but database WAL files, backups or filesystem snapshots may retain old bytes. Export/import, automatic store migration, semantic consolidation and evidence freshness checks are not implemented. Recall is lexical; vector and embedding providers are not active.
 
-Use `remember --input event.json` for structured provenance, scope, applicability, validity and relations. Use `recall --environment production --workspace WORKSPACE_ID` to provide restrictions explicitly. `revise` supports `--status active|superseded|archived|expired`, `--pinned true|false` and `--expires-at ISO_DATE`, with the required expected revision. Hypotheses expire after 30 days by default. Pinned records still respect explicit validity and expiry. Confirmed records require evidence. `consolidate --dry-run` only previews expiry reviews. Graph ranking, contradiction expansion, content freshness checks, import/export, automatic consolidation, configurable privacy exclusions and full configuration precedence are pending. Do not treat this initial version as release-ready.
+If a command says the project is not initialized, run `hippocampus init` in the target project. If recall returns no results, check the query, expiry, status and required context. If the database is busy, retry after the other writer finishes.
 
-## Tests and contribution
+## Development
 
-`npm test` builds and runs process-level CLI and real SDK MCP tests without paid keys. `npm run evaluate` compares no memory, a fixed record baseline and selective retrieval on a tiny synthetic fixture. It reports retrieval metrics and estimated context cost; it does not measure agent task outcomes. Add larger versioned fixtures before drawing performance conclusions.
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run evaluate
+```
 
-Preserve `AGENTS.md`, keep changes scoped, add meaningful regression tests and update documentation to match verified behavior. Never commit database files or credentials. Publication and GitHub pushes require explicit authorization. See `docs/architecture.md` for implementation tradeoffs and remaining delivery gates.
+The test suite covers persistence across processes, recall relevance, project isolation, budgets, configuration, concurrent revisions, deletion, adapters and MCP clients. It needs no paid API keys. The small synthetic evaluation compares selective recall with fixed instructions and no memory; it does not measure end-to-end agent performance.
 
-JSON Schemas are in `docs/schemas/` and the packed artifact’s `dist/` directory. The release workflow prepares artifacts only and does not publish. Local integration checks have passed on macOS with Node 24 and Node 26. The Windows/Linux matrix is configured in CI but has not yet been observed running.
+The source is organized under `packages/core`, `packages/storage-sqlite`, `packages/mcp`, `packages/cli` and `packages/adapters`. See the repository's `docs/` directory for the memory model, JSON Schemas and architecture decisions. Follow `AGENTS.md` when contributing.
+
+## License
+
+MIT.
