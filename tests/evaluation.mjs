@@ -33,8 +33,18 @@ for (const strategy of strategies) {
     stale = 0,
     irrelevantTasks = 0,
     irrelevantFalsePositives = 0;
+  const categoryStats = {};
   const start = performance.now();
   for (const task of dataset.tasks) {
+    const category = task.category ?? "uncategorized";
+    const categoryStat = (categoryStats[category] ??= {
+      hits: 0,
+      expected: 0,
+      tasks: 0,
+      falsePositiveTasks: 0,
+    });
+    categoryStat.expected += task.relevant.length;
+    categoryStat.tasks += 1;
     const selected =
       strategy === "no memory"
         ? []
@@ -48,11 +58,13 @@ for (const strategy of strategies) {
       );
       const relevant = task.relevant.includes(index);
       hit += Number(relevant);
+      categoryStat.hits += Number(relevant);
       stale += Number(Boolean(dataset.memories[index]?.expiresAt));
     }
     if (task.relevant.length === 0) {
       irrelevantTasks += 1;
       irrelevantFalsePositives += Number(selected.length > 0);
+      categoryStat.falsePositiveTasks += Number(selected.length > 0);
     }
     total += selected.length;
     cost += Math.ceil(Buffer.byteLength(JSON.stringify(selected)) / 3);
@@ -60,7 +72,7 @@ for (const strategy of strategies) {
   console.log(
     JSON.stringify({
       strategy,
-      precision: total ? hit / total : 0,
+      precision: total ? hit / total : null,
       recall: expected ? hit / expected : 0,
       staleRate: total ? stale / total : 0,
       irrelevantFalsePositiveRate: irrelevantTasks
@@ -68,6 +80,19 @@ for (const strategy of strategies) {
         : 0,
       contextEstimate: cost,
       latencyMs: Math.round(performance.now() - start),
+      categoryRecall: Object.fromEntries(
+        Object.entries(categoryStats)
+          .filter(([, stats]) => stats.expected > 0)
+          .map(([category, stats]) => [category, stats.hits / stats.expected]),
+      ),
+      categoryFalsePositiveRate: Object.fromEntries(
+        Object.entries(categoryStats)
+          .filter(([, stats]) => stats.expected === 0)
+          .map(([category, stats]) => [
+            category,
+            stats.tasks ? stats.falsePositiveTasks / stats.tasks : 0,
+          ]),
+      ),
       taskOutcomes: "retrieval fixture only; no agent model used",
     }),
   );

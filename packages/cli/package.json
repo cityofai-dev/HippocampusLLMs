@@ -1,6 +1,6 @@
 {
   "name": "@hippocampusllms/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Local-first project memory for coding agents, with SQLite storage, lexical and vector recall, a CLI, and an MCP server.",
   "keywords": [

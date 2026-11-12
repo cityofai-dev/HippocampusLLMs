@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import assert from "node:assert/strict";
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const dir = mkdtempSync(join(tmpdir(), "hippocampus-packed-"));
+const cache = join(dir, "npm-cache");
 function command(exe, args, cwd) {
   const r = spawnSync(exe, args, {
     cwd,
@@ -16,16 +18,26 @@ function command(exe, args, cwd) {
 const output = JSON.parse(
   command(
     npm,
-    ["pack", "--workspace", "packages/cli", "--json"],
+    ["pack", "--workspace", "packages/cli", "--json", "--cache", cache],
     process.cwd(),
   ),
 );
 const tar = resolve(output[0].filename);
-const dir = mkdtempSync(join(tmpdir(), "hippocampus-packed-"));
 writeFileSync(join(dir, "package.json"), '{"private":true}');
 command(
   npm,
-  ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", tar],
+  [
+    "install",
+    "--omit=dev",
+    "--ignore-scripts",
+    "--no-audit",
+    "--no-fund",
+    "--cache",
+    cache,
+    "--fetch-retries=1",
+    "--fetch-timeout=30000",
+    tar,
+  ],
   dir,
 );
 const bin = join(dir, "node_modules/@hippocampusllms/cli/dist/index.js");

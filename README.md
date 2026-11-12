@@ -183,7 +183,7 @@ The database path resolves relative to `.hippocampus/config.json`. Configuration
 | Vector index            | SQLite local vectors   | Qdrant, pgvector         |
 | Embeddings              | Local token hashing    | Semantic model providers |
 
-The canonical store owns records and revisions. A retrieval index selects records; it is not the authoritative store. Local vectors are 256-dimensional hashed token counts with cosine similarity. They run offline and are **not semantic language-model embeddings**. Hybrid mode combines lexical and vector candidates by reciprocal rank. A shared-token relevance guard filters weak matches and hash collisions. On the current 12-query synthetic evaluation, lexical, hybrid and local token-vector modes tie; these vectors have not shown a quality improvement on that set. Qdrant, pgvector, PostgreSQL and semantic embedding providers are planned and cannot be selected.
+The canonical store owns records and revisions. A retrieval index selects records; it is not the authoritative store. Local vectors are 256-dimensional hashed token counts with cosine similarity. They run offline and are **not semantic language-model embeddings**. Hybrid mode combines lexical and vector candidates by reciprocal rank. A shared-token relevance guard filters weak matches and hash collisions. On the current 24-task synthetic evaluation, lexical, hybrid and local token-vector modes tie; none recall the paraphrase cases, so these vectors have not shown a quality improvement on that set. Qdrant, pgvector, PostgreSQL and semantic embedding providers are planned and cannot be selected.
 
 ## Command reference
 

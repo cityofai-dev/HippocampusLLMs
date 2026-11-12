@@ -48,32 +48,161 @@
     {
       "kind": "procedure",
       "content": "The OpenAPI response schema documents nullable pagination metadata"
+    },
+    {
+      "kind": "episode",
+      "content": "A billing webhook retry after a 504 charged the invoice twice; deduplicating by event ID fixed it"
+    },
+    {
+      "kind": "decision",
+      "content": "In API v3, refresh token rotation retries a 429 response at most twice after compare-and-swap"
+    },
+    {
+      "kind": "procedure",
+      "content": "The npm pack artifact must include compiled dist files and run with production dependencies only"
+    },
+    {
+      "kind": "constraint",
+      "content": "Codex MCP configuration belongs under mcp_servers and must preserve unrelated config.toml entries"
+    },
+    {
+      "kind": "procedure",
+      "content": "On Windows, invoke npm.cmd with argument arrays so project paths containing spaces remain intact"
+    },
+    {
+      "kind": "procedure",
+      "content": "Hybrid retrieval merges SQLite FTS5 and local token-vector candidates with reciprocal rank fusion"
+    },
+    {
+      "kind": "decision",
+      "content": "SQLite remains the canonical memory store; PostgreSQL and remote vector databases are not implemented"
+    },
+    {
+      "kind": "episode",
+      "content": "An expired SMTP attachment fallback used by the legacy mail queue was removed",
+      "expiresAt": "2000-01-01T00:00:00.000Z"
     }
   ],
   "tasks": [
     {
       "query": "refresh token row locking serializable transaction",
-      "relevant": [0]
+      "relevant": [0],
+      "category": "exact"
     },
-    { "query": "SQLite busy timeout locking", "relevant": [1] },
-    { "query": "CSS grid card auto placement", "relevant": [2] },
-    { "query": "expired unsafe in-memory cache reuse", "relevant": [] },
-    { "query": "API v2 refresh token compare-and-swap", "relevant": [4] },
-    { "query": "secret credentials bearer token retention", "relevant": [5] },
+    {
+      "query": "SQLite busy timeout locking",
+      "relevant": [1],
+      "category": "exact"
+    },
+    {
+      "query": "CSS grid card auto placement",
+      "relevant": [2],
+      "category": "exact"
+    },
+    {
+      "query": "expired unsafe in-memory cache reuse",
+      "relevant": [],
+      "category": "stale"
+    },
+    {
+      "query": "API v2 refresh token compare-and-swap",
+      "relevant": [4],
+      "category": "version"
+    },
+    {
+      "query": "secret credentials bearer token retention",
+      "relevant": [5],
+      "category": "exact"
+    },
     {
       "query": "maintenance mode migration verify imported records",
-      "relevant": [6]
+      "relevant": [6],
+      "category": "exact"
     },
-    { "query": "profile cache invalidation contradiction", "relevant": [7, 8] },
-    { "query": "remember verified learning at task start", "relevant": [9] },
+    {
+      "query": "profile cache invalidation contradiction",
+      "relevant": [7, 8],
+      "category": "conflict"
+    },
+    {
+      "query": "remember verified learning at task start",
+      "relevant": [9],
+      "category": "exact"
+    },
     {
       "query": "container query settings panel responsive width",
-      "relevant": [10]
+      "relevant": [10],
+      "category": "exact"
     },
     {
       "query": "OpenAPI nullable pagination response schema",
-      "relevant": [11]
+      "relevant": [11],
+      "category": "exact"
     },
-    { "query": "gardening flowers", "relevant": [] }
+    {
+      "query": "gardening flowers",
+      "relevant": [],
+      "category": "irrelevant"
+    },
+    {
+      "query": "duplicate billing webhook after 504 invoice event ID",
+      "relevant": [12],
+      "category": "near-duplicate"
+    },
+    {
+      "query": "API v3 refresh 429 retry twice",
+      "relevant": [13],
+      "category": "version"
+    },
+    {
+      "query": "npm pack compiled dist production dependencies",
+      "relevant": [14],
+      "category": "exact"
+    },
+    {
+      "query": "Codex MCP mcp_servers preserve config.toml entries",
+      "relevant": [15],
+      "category": "exact"
+    },
+    {
+      "query": "Windows npm.cmd paths with spaces argument arrays",
+      "relevant": [16],
+      "category": "exact"
+    },
+    {
+      "query": "hybrid FTS5 vector reciprocal rank fusion",
+      "relevant": [17],
+      "category": "exact"
+    },
+    {
+      "query": "SQLite canonical store PostgreSQL unsupported",
+      "relevant": [18],
+      "category": "exact"
+    },
+    {
+      "query": "expired SMTP attachment fallback legacy mail queue",
+      "relevant": [],
+      "category": "stale"
+    },
+    {
+      "query": "How can we prevent repeated charges when the payment service times out?",
+      "relevant": [12],
+      "category": "paraphrase"
+    },
+    {
+      "query": "How do concurrent workers renew credentials without overwriting each other?",
+      "relevant": [0],
+      "category": "paraphrase"
+    },
+    {
+      "query": "What should be included in a distributable install that runs on a fresh machine?",
+      "relevant": [14],
+      "category": "paraphrase"
+    },
+    {
+      "query": "Which retry policy applies to the current third API release after rate limiting?",
+      "relevant": [13],
+      "category": "paraphrase"
+    }
   ]
 }
