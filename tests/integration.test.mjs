@@ -200,3 +200,86 @@ test("configuration environment precedence and user identity protection", () => 
   );
   assert.notEqual(user.status, 0);
 });
+test("vector and hybrid modes index existing memories and follow revisions", () => {
+  const dir = project();
+  const old = run(dir, [
+    "remember",
+    "--kind",
+    "decision",
+    "--content",
+    "Refresh token rotation requires atomic database transactions",
+  ]);
+  assert.equal(
+    run(dir, ["config", "preset", "hybrid"]).retrieval.mode,
+    "hybrid",
+  );
+  let results = run(dir, ["recall", "refresh token"]);
+  assert.equal(results.memories[0].id, old.id);
+  assert.match(results.memories[0].reason, /lexical\+vector/);
+  assert.equal(
+    run(dir, ["config", "preset", "vector"]).retrieval.mode,
+    "vector",
+  );
+  results = run(dir, ["recall", "refresh token"]);
+  assert.equal(results.memories[0].id, old.id);
+  assert.match(results.memories[0].reason, /vector match/);
+  run(dir, [
+    "revise",
+    old.id,
+    "--content",
+    "Database transactions require atomic commits",
+    "--expected-revision",
+    "1",
+  ]);
+  assert.equal(run(dir, ["recall", "refresh token"]).memories.length, 0);
+  assert.equal(run(dir, ["recall", "atomic commits"]).memories[0].id, old.id);
+  run(dir, ["forget", old.id]);
+  assert.equal(run(dir, ["recall", "atomic commits"]).memories.length, 0);
+});
+test("invalid vector combinations leave configuration unchanged", () => {
+  const dir = project();
+  const path = join(dir, ".hippocampus/config.json");
+  const before = readFileSync(path, "utf8");
+  run(dir, ["config", "set", "retrieval.mode", "vector"], false);
+  assert.equal(readFileSync(path, "utf8"), before);
+  assert.equal(
+    run(dir, ["config", "preset", "lexical"]).retrieval.vector.provider,
+    "none",
+  );
+});
+test("local vectors keep project and applicability boundaries and budget", () => {
+  const first = project(),
+    second = project();
+  run(first, ["config", "preset", "vector"]);
+  run(second, ["config", "preset", "vector"]);
+  const event = join(first, "vector-event.json");
+  writeFileSync(
+    event,
+    JSON.stringify({
+      kind: "constraint",
+      content: "Production token rotation requires atomic commits",
+      applicability: { environments: ["production"] },
+    }),
+  );
+  run(first, ["remember", "--input", event]);
+  assert.equal(run(first, ["recall", "token rotation"]).memories.length, 0);
+  assert.equal(
+    run(first, ["recall", "token rotation", "--environment", "production"])
+      .memories.length,
+    1,
+  );
+  assert.equal(
+    run(second, ["recall", "token rotation", "--environment", "production"])
+      .memories.length,
+    0,
+  );
+  const bounded = run(first, [
+    "recall",
+    "token rotation",
+    "--environment",
+    "production",
+    "--budget",
+    "180",
+  ]);
+  assert.ok(Math.ceil(Buffer.byteLength(JSON.stringify(bounded)) / 3) <= 180);
+});

@@ -10,6 +10,26 @@ import {
 import { resolve, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+const vectorSchema = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("none") }).strict(),
+  z
+    .object({
+      provider: z.literal("sqlite"),
+      dimensions: z.literal(256),
+      model: z.literal("token-hash-v1"),
+    })
+    .strict(),
+]);
+const embeddingSchema = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("none") }).strict(),
+  z
+    .object({
+      provider: z.literal("local-hash"),
+      dimensions: z.literal(256),
+      model: z.literal("token-hash-v1"),
+    })
+    .strict(),
+]);
 export const schema = z
   .object({
     schemaVersion: z.literal(1),
@@ -22,16 +42,31 @@ export const schema = z
       .strict(),
     retrieval: z
       .object({
-        mode: z.literal("lexical"),
+        mode: z.enum(["lexical", "hybrid", "vector"]),
         maxContextTokens: z.number().int().min(100).max(10000),
-        vector: z.object({ provider: z.literal("none") }).strict(),
+        vector: vectorSchema,
       })
       .strict(),
-    embeddings: z.object({ provider: z.literal("none") }).strict(),
+    embeddings: embeddingSchema,
     capture: z.object({ mode: z.literal("explicit") }).strict(),
     privacy: z.object({ telemetry: z.literal(false) }).strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((config, ctx) => {
+    const local =
+      config.retrieval.vector.provider === "sqlite" &&
+      config.embeddings.provider === "local-hash";
+    const lexical =
+      config.retrieval.vector.provider === "none" &&
+      config.embeddings.provider === "none";
+    if (config.retrieval.mode === "lexical" ? !lexical : !local)
+      ctx.addIssue({
+        code: "custom",
+        path: ["retrieval", "mode"],
+        message:
+          "Lexical requires no vector/embedding provider; hybrid and vector require SQLite vectors with local-hash embeddings",
+      });
+  });
 export type Config = z.infer<typeof schema>;
 export function defaults(): Config {
   return {
@@ -112,4 +147,24 @@ export function saveUser(raw: Record<string, unknown>) {
   if ("projectId" in raw) throw Error("User defaults cannot contain projectId");
   schema.parse(merge(defaults(), raw));
   atomic(userConfigPath(), raw);
+}
+export function withRetrievalPreset(
+  config: Config,
+  mode: "lexical" | "hybrid" | "vector",
+): Config {
+  return schema.parse({
+    ...config,
+    retrieval: {
+      ...config.retrieval,
+      mode,
+      vector:
+        mode === "lexical"
+          ? { provider: "none" }
+          : { provider: "sqlite", dimensions: 256, model: "token-hash-v1" },
+    },
+    embeddings:
+      mode === "lexical"
+        ? { provider: "none" }
+        : { provider: "local-hash", dimensions: 256, model: "token-hash-v1" },
+  });
 }

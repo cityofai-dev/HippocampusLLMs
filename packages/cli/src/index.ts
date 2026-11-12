@@ -19,6 +19,7 @@ import {
   atomic,
   configPath,
   database,
+  withRetrievalPreset,
 } from "./config.js";
 import { SqliteStore } from "../../storage-sqlite/src/index.js";
 import { Service } from "../../core/src/service.js";
@@ -162,6 +163,15 @@ async function main() {
       output(x);
       return;
     }
+    if (p[1] === "preset") {
+      const mode = p[2];
+      if (mode !== "lexical" && mode !== "hybrid" && mode !== "vector")
+        throw Error("Choose lexical, hybrid or vector");
+      const next = withRetrievalPreset(load(base), mode);
+      atomic(configPath(base), next);
+      output(next);
+      return;
+    }
     if (p[1] === "set") {
       const candidate = load(base);
       const keys = (p[2] ?? "").split(".");
@@ -206,14 +216,44 @@ async function main() {
       });
       try {
         console.log(
-          "SQLite is the canonical store; FTS5 is the retrieval index. Vector providers are planned.",
+          "Canonical database choices:\n  1. SQLite (available)\n  2. PostgreSQL (planned, unavailable)",
         );
-        const budget = await rl.question("Context budget [1500]: ");
+        const databaseChoice = await rl.question("Database [1]: ");
+        if (databaseChoice !== "" && databaseChoice !== "1")
+          throw Error(
+            "SQLite is the only available canonical database provider",
+          );
+        console.log(
+          "Retrieval choices:\n  1. SQLite lexical FTS5\n  2. SQLite lexical + local token vectors (hybrid)\n  3. SQLite local token vectors only",
+        );
+        console.log(
+          "Local token vectors compare hashed words; they are not semantic embeddings. Qdrant and pgvector are planned and unavailable.",
+        );
+        const choice = await rl.question(
+          `Choose retrieval [${c.retrieval.mode}]: `,
+        );
+        const mode =
+          choice === "1"
+            ? "lexical"
+            : choice === "2"
+              ? "hybrid"
+              : choice === "3"
+                ? "vector"
+                : choice === ""
+                  ? c.retrieval.mode
+                  : undefined;
+        if (!mode)
+          throw Error("Choose 1, 2, 3 or press Enter to keep the current mode");
+        const budget = await rl.question(
+          `Context budget [${c.retrieval.maxContextTokens}]: `,
+        );
         const next = schema.parse({
-          ...c,
+          ...withRetrievalPreset(load(base), mode),
           retrieval: {
-            ...c.retrieval,
-            maxContextTokens: budget ? Number(budget) : 1500,
+            ...withRetrievalPreset(load(base), mode).retrieval,
+            maxContextTokens: budget
+              ? Number(budget)
+              : c.retrieval.maxContextTokens,
           },
         });
         output(next);
@@ -239,7 +279,8 @@ async function main() {
     return;
   }
   const store = new SqliteStore(database(base, c));
-  const service = new Service(store, c.projectId);
+  if (c.retrieval.mode !== "lexical") store.enableLocalVectors();
+  const service = new Service(store, c.projectId, c.retrieval.mode);
   if (command === "serve") {
     if (typeof v.project !== "string" || !isAbsolute(v.project))
       throw Error("serve requires an absolute --project path");
@@ -256,7 +297,12 @@ async function main() {
     switch (command) {
       case "config":
         if (p[1] !== "test") throw Error("Unknown config command");
-        output({ connected: true, provider: "sqlite" });
+        output({
+          connected: true,
+          provider: "sqlite",
+          retrievalMode: c.retrieval.mode,
+          vectorIndex: c.retrieval.vector.provider,
+        });
         break;
       case "remember":
         if (v.input) {

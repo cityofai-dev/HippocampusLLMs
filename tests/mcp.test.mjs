@@ -52,3 +52,40 @@ test("two MCP clients share durable memory and report tool errors", async () => 
     await second.close();
   }
 });
+test("MCP recalls through configured local vectors", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hippo-vector-mcp-"));
+  const bin = resolve("packages/cli/dist/index.js");
+  const command = (args) =>
+    spawnSync(process.execPath, [bin, ...args, "--project", dir], {
+      encoding: "utf8",
+    });
+  assert.equal(command(["init"]).status, 0);
+  assert.equal(command(["config", "preset", "vector"]).status, 0);
+  const stored = JSON.parse(
+    command([
+      "remember",
+      "--kind",
+      "decision",
+      "--content",
+      "Atomic token transactions prevent duplicate refresh",
+    ]).stdout,
+  );
+  const client = new Client({ name: "vector-test", version: "1.0" });
+  await client.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: [bin, "serve", "--project", dir],
+      stderr: "pipe",
+    }),
+  );
+  try {
+    const result = await client.callTool({
+      name: "hippocampus_recall",
+      arguments: { query: "token transactions" },
+    });
+    assert.equal(result.isError, undefined);
+    assert.match(JSON.stringify(result), new RegExp(stored.id));
+  } finally {
+    await client.close();
+  }
+});

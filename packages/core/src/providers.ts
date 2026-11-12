@@ -7,6 +7,7 @@ export interface MemoryStoreProvider {
   update(memory: Memory, expectedRevision: number): Memory;
   delete(projectId: string, id: string): boolean;
   search(projectId: string, query: string, limit: number): Memory[];
+  searchVector?(projectId: string, query: string, limit: number): Memory[];
   close(): void;
 }
 export interface VectorIndexProvider {
@@ -25,10 +26,14 @@ export const providerRegistry = {
   ],
   vectors: [
     { name: "none", implemented: true },
+    { name: "sqlite", implemented: true },
     { name: "qdrant", implemented: false },
     { name: "pgvector", implemented: false },
   ],
-  embeddings: [{ name: "none", implemented: true }],
+  embeddings: [
+    { name: "none", implemented: true },
+    { name: "local-hash", implemented: true, dimensions: 256, semantic: false },
+  ],
 } as const;
 
 /** Optional retrieval indexes are rebuildable; they never own canonical records. */

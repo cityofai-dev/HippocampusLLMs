@@ -1,13 +1,14 @@
 {
   "name": "@hippocampusllms/cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Local-first project memory for coding agents, with SQLite storage, selective lexical recall, a CLI, and an MCP server for Claude Code and Codex.",
+  "description": "Local-first project memory for coding agents, with SQLite storage, lexical and vector recall, a CLI, and an MCP server.",
   "keywords": [
     "coding-agents",
     "project-memory",
     "mcp",
     "sqlite",
+    "vector-search",
     "claude-code",
     "codex",
     "cli"

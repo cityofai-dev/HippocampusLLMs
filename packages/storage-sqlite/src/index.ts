@@ -4,11 +4,18 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { MemoryStoreProvider } from "../../core/src/providers.js";
 import { AppError, type Memory } from "../../core/src/model.js";
+import {
+  localVector,
+  similarity,
+  LOCAL_VECTOR_DIMENSIONS,
+  LOCAL_VECTOR_MODEL,
+} from "../../core/src/local-vector.js";
 
 type Row = { body: string };
 export class SqliteStore implements MemoryStoreProvider {
   readonly name = "sqlite";
   private db: DatabaseSync;
+  private vectorEnabled = false;
   constructor(readonly path: string) {
     mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path, { timeout: 2500 });
@@ -21,7 +28,7 @@ export class SqliteStore implements MemoryStoreProvider {
     const version = (
       this.db.prepare("PRAGMA user_version").get() as { user_version: number }
     ).user_version;
-    if (version > 1)
+    if (version > 2)
       throw new AppError(
         "INVALID_CONFIG",
         "Database schema is newer than this CLI",
@@ -35,6 +42,50 @@ export class SqliteStore implements MemoryStoreProvider {
         CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(id UNINDEXED, project_id UNINDEXED, content, cues, entities);
         PRAGMA user_version=1; COMMIT;`);
     }
+    if (version < 2) {
+      this.db.exec(`BEGIN IMMEDIATE;
+        CREATE TABLE IF NOT EXISTS memory_vectors (
+          id TEXT PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
+          project_id TEXT NOT NULL, vector TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS memory_vectors_project ON memory_vectors(project_id);
+        CREATE TABLE IF NOT EXISTS vector_metadata (
+          singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+          model TEXT NOT NULL, dimensions INTEGER NOT NULL
+        );
+        PRAGMA user_version=2; COMMIT;`);
+    }
+  }
+  enableLocalVectors(): void {
+    this.transaction(() => {
+      const metadata = this.db
+        .prepare(
+          "SELECT model,dimensions FROM vector_metadata WHERE singleton=1",
+        )
+        .get() as { model: string; dimensions: number } | undefined;
+      if (
+        metadata &&
+        (metadata.model !== LOCAL_VECTOR_MODEL ||
+          metadata.dimensions !== LOCAL_VECTOR_DIMENSIONS)
+      ) {
+        this.db.exec(
+          "DELETE FROM memory_vectors; DELETE FROM vector_metadata;",
+        );
+      }
+      this.db
+        .prepare(
+          "INSERT OR REPLACE INTO vector_metadata(singleton,model,dimensions) VALUES(1,?,?)",
+        )
+        .run(LOCAL_VECTOR_MODEL, LOCAL_VECTOR_DIMENSIONS);
+      const missing = this.db
+        .prepare(
+          "SELECT m.body FROM memories m LEFT JOIN memory_vectors v ON m.id=v.id WHERE v.id IS NULL",
+        )
+        .all() as Row[];
+      for (const row of missing)
+        this.indexVector(recordSchema.parse(JSON.parse(row.body)));
+    });
+    this.vectorEnabled = true;
   }
   private transaction<T>(fn: () => T): T {
     try {
@@ -113,6 +164,7 @@ export class SqliteStore implements MemoryStoreProvider {
           JSON.stringify(memory),
         );
       this.index(memory);
+      if (this.vectorEnabled) this.indexVector(memory);
       return memory;
     });
   }
@@ -128,6 +180,21 @@ export class SqliteStore implements MemoryStoreProvider {
         memory.content,
         memory.cues.join(" "),
         memory.entities.join(" "),
+      );
+  }
+  private indexVector(memory: Memory): void {
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO memory_vectors(id,project_id,vector) VALUES(?,?,?)",
+      )
+      .run(
+        memory.id,
+        memory.projectId,
+        JSON.stringify(
+          localVector(
+            [memory.content, ...memory.cues, ...memory.entities].join(" "),
+          ),
+        ),
       );
   }
   update(memory: Memory, expectedRevision: number): Memory {
@@ -146,6 +213,7 @@ export class SqliteStore implements MemoryStoreProvider {
         .prepare("UPDATE memories SET revision=?,status=?,body=? WHERE id=?")
         .run(memory.revision, memory.status, JSON.stringify(memory), memory.id);
       this.index(memory);
+      if (this.vectorEnabled) this.indexVector(memory);
       return memory;
     });
   }
@@ -210,6 +278,26 @@ export class SqliteStore implements MemoryStoreProvider {
       )
       .all(expression, projectId, Math.min(limit, 100)) as Row[];
     return rows.map((r) => recordSchema.parse(JSON.parse(r.body)));
+  }
+  searchVector(projectId: string, query: string, limit: number): Memory[] {
+    if (!this.vectorEnabled)
+      throw new AppError("INVALID_CONFIG", "Local vector index is not enabled");
+    const queryVector = localVector(query);
+    if (!queryVector.some(Boolean)) return [];
+    const rows = this.db
+      .prepare(
+        "SELECT m.body,v.vector FROM memory_vectors v JOIN memories m ON m.id=v.id WHERE v.project_id=?",
+      )
+      .all(projectId) as (Row & { vector: string })[];
+    return rows
+      .map((row) => ({
+        memory: recordSchema.parse(JSON.parse(row.body)),
+        score: similarity(queryVector, JSON.parse(row.vector) as number[]),
+      }))
+      .filter((item) => item.score >= 0.15)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.min(limit, 100))
+      .map((item) => item.memory);
   }
   close(): void {
     this.db.close();

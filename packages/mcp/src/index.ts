@@ -4,7 +4,7 @@ import { evidenceSchema, relationSchema } from "../../core/src/schema.js";
 import { z } from "zod";
 import { Service } from "../../core/src/service.js";
 export async function serve(service: Service, check: () => void = () => {}) {
-  const server = new McpServer({ name: "hippocampus", version: "0.1.0" });
+  const server = new McpServer({ name: "hippocampus", version: "0.2.0" });
   const register = (
     name: string,
     shape: z.ZodRawShape,

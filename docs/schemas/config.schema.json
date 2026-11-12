@@ -25,27 +25,57 @@
     "retrieval": {
       "type": "object",
       "properties": {
-        "mode": { "type": "string", "const": "lexical" },
+        "mode": { "type": "string", "enum": ["lexical", "hybrid", "vector"] },
         "maxContextTokens": {
           "type": "integer",
           "minimum": 100,
           "maximum": 10000
         },
         "vector": {
-          "type": "object",
-          "properties": { "provider": { "type": "string", "const": "none" } },
-          "required": ["provider"],
-          "additionalProperties": false
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "provider": { "type": "string", "const": "none" }
+              },
+              "required": ["provider"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "provider": { "type": "string", "const": "sqlite" },
+                "dimensions": { "type": "number", "const": 256 },
+                "model": { "type": "string", "const": "token-hash-v1" }
+              },
+              "required": ["provider", "dimensions", "model"],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": ["mode", "maxContextTokens", "vector"],
       "additionalProperties": false
     },
     "embeddings": {
-      "type": "object",
-      "properties": { "provider": { "type": "string", "const": "none" } },
-      "required": ["provider"],
-      "additionalProperties": false
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "provider": { "type": "string", "const": "none" } },
+          "required": ["provider"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string", "const": "local-hash" },
+            "dimensions": { "type": "number", "const": 256 },
+            "model": { "type": "string", "const": "token-hash-v1" }
+          },
+          "required": ["provider", "dimensions", "model"],
+          "additionalProperties": false
+        }
+      ]
     },
     "capture": {
       "type": "object",

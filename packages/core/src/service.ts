@@ -12,6 +12,7 @@ export class Service {
   constructor(
     public store: MemoryStoreProvider,
     public projectId: string,
+    public retrievalMode: "lexical" | "hybrid" | "vector" = "lexical",
   ) {}
   remember(input: NewMemory) {
     for (const relation of input.relations ?? [])
@@ -72,7 +73,39 @@ export class Service {
         "Budget cannot fit response metadata",
       );
     const now = new Date().toISOString();
-    for (const m of this.store.search(this.projectId, query, 100)) {
+    const lexical =
+      this.retrievalMode === "vector"
+        ? []
+        : this.store.search(this.projectId, query, 100);
+    const vector =
+      this.retrievalMode === "lexical"
+        ? []
+        : this.store.searchVector?.(this.projectId, query, 100);
+    if (vector === undefined)
+      throw new AppError(
+        "INVALID_CONFIG",
+        "Configured vector index is unavailable",
+      );
+    const ranked = new Map<
+      string,
+      { memory: Memory; score: number; sources: string[] }
+    >();
+    for (const [source, items] of [
+      ["lexical", lexical],
+      ["vector", vector],
+    ] as const)
+      items.forEach((memory, rank) => {
+        const existing = ranked.get(memory.id);
+        const contribution = 1 / (rank + 1);
+        ranked.set(memory.id, {
+          memory,
+          score: (existing?.score ?? 0) + contribution,
+          sources: [...(existing?.sources ?? []), source],
+        });
+      });
+    for (const { memory: m, sources } of [...ranked.values()].sort(
+      (a, b) => b.score - a.score,
+    )) {
       if (m.scope.level === "component" && m.scope.component !== component)
         continue;
       if (m.workspaceId && m.workspaceId !== workspace) continue;
@@ -101,7 +134,7 @@ export class Service {
         verification: m.verification,
         evidence: m.evidence,
         relations: m.relations,
-        reason: "lexical term match; active and applicable",
+        reason: `${sources.join("+")} match; active and applicable`,
       };
       result.memories.push(capsule);
       if (estimateTokens(result) > budget) result.memories.pop();
