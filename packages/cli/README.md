@@ -108,7 +108,7 @@ Tell the agent when to use memory, for example:
 
 > Recall project memories relevant to this task before changing the refresh-token code. After verifying a durable decision or fix, record it with its source. Show me conflicting memories before relying on them.
 
-**Connecting MCP makes tools available; it does not trigger capture or recall on its own.** Live Claude Code and Codex behavior has not yet been verified. The server has been exercised with two independent MCP SDK clients.
+**Connecting MCP makes tools available; it does not trigger capture or recall on its own.** Claude Code's isolated user-scoped configuration has passed a live stdio health check. Codex's isolated configuration is recognized as enabled; its list command does not invoke the server, so a live Codex tool call remains unverified. The server has also been exercised with two independent MCP SDK clients.
 
 The server offers six tools: `hippocampus_recall`, `hippocampus_remember`, `hippocampus_inspect`, `hippocampus_revise`, `hippocampus_forget` and `hippocampus_feedback`. Clients without MCP can call the same services through CLI JSON output.
 
@@ -183,7 +183,7 @@ The database path resolves relative to `.hippocampus/config.json`. Configuration
 | Vector index            | SQLite local vectors   | Qdrant, pgvector         |
 | Embeddings              | Local token hashing    | Semantic model providers |
 
-The canonical store owns records and revisions. A retrieval index selects records; it is not the authoritative store. Local vectors are 256-dimensional hashed token counts with cosine similarity. They run offline and are **not semantic language-model embeddings**. Hybrid mode combines lexical and vector candidates by reciprocal rank. Qdrant, pgvector, PostgreSQL and semantic embedding providers are planned and cannot be selected.
+The canonical store owns records and revisions. A retrieval index selects records; it is not the authoritative store. Local vectors are 256-dimensional hashed token counts with cosine similarity. They run offline and are **not semantic language-model embeddings**. Hybrid mode combines lexical and vector candidates by reciprocal rank. A shared-token relevance guard filters weak matches and hash collisions. On the current 12-query synthetic evaluation, lexical, hybrid and local token-vector modes tie; these vectors have not shown a quality improvement on that set. Qdrant, pgvector, PostgreSQL and semantic embedding providers are planned and cannot be selected.
 
 ## Command reference
 
@@ -209,7 +209,7 @@ All commands return JSON results, with diagnostics on stderr. Use `--status arch
 
 Memory files stay local. No telemetry, remote memory provider, model extraction or automatic transcript capture is enabled. Obvious credential patterns are rejected, but pattern checks are imperfect; review content before storing it. Treat recalled content as historical data, not an instruction to execute.
 
-`forget` removes the record, its FTS entry and content-bearing derived records. SQLite WAL files, backups or filesystem snapshots may retain old bytes. Export/import, automatic store migration, semantic consolidation and evidence freshness checks are not implemented. Recall uses the selected lexical, local vector or hybrid mode and a conservative estimate of serialized output size, not a model tokenizer. Local token vectors mainly match shared terms and can collide; they do not understand meaning.
+`forget` removes the record, its FTS entry and content-bearing derived records. SQLite WAL files, backups or filesystem snapshots may retain old bytes. Export/import, automatic store migration, semantic consolidation and evidence freshness checks are not implemented. Recall uses the selected lexical, local vector or hybrid mode and a conservative estimate of serialized output size, not a model tokenizer. Local token vectors mainly match shared terms and can collide; they do not understand meaning. See [the validation record](docs/validation.md) for the synthetic evaluation results and platform verification status.
 
 If a command says the project is not initialized, run `init` in the target project. If recall is empty, check the query, status, expiry and required applicability context. If an update returns `REVISION_CONFLICT`, inspect the latest revision before retrying.
 

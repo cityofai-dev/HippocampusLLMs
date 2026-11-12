@@ -8,6 +8,22 @@ import {
   type Memory,
 } from "./model.js";
 import type { MemoryStoreProvider } from "./providers.js";
+
+function lexicalOverlap(query: string, memory: Memory): number {
+  const terms = (value: string) =>
+    new Set(value.toLowerCase().match(/[\p{L}\p{N}_]{3,}/gu) ?? []);
+  const queryTerms = terms(query);
+  if (!queryTerms.size) return 0;
+  const memoryTerms = terms(
+    [memory.content, memory.rationale, ...memory.cues, ...memory.entities]
+      .filter(Boolean)
+      .join(" "),
+  );
+  let shared = 0;
+  for (const term of queryTerms) if (memoryTerms.has(term)) shared++;
+  return shared;
+}
+
 export class Service {
   constructor(
     public store: MemoryStoreProvider,
@@ -73,6 +89,10 @@ export class Service {
         "Budget cannot fit response metadata",
       );
     const now = new Date().toISOString();
+    const queryTermCount = new Set(
+      query.toLowerCase().match(/[\p{L}\p{N}_]{3,}/gu) ?? [],
+    ).size;
+    const minimumOverlap = Math.min(2, queryTermCount);
     const lexical =
       this.retrievalMode === "vector"
         ? []
@@ -106,6 +126,12 @@ export class Service {
     for (const { memory: m, sources } of [...ranked.values()].sort(
       (a, b) => b.score - a.score,
     )) {
+      // FTS's OR query is candidate generation; require a modest lexical
+      // signal before surfacing a result. This prevents a lone incidental word
+      // from making an unrelated memory look relevant.
+      // Token-hash vector collisions can score unrelated records, so require
+      // at least a small exact-token signal even in vector-only mode.
+      if (lexicalOverlap(query, m) < minimumOverlap) continue;
       if (m.scope.level === "component" && m.scope.component !== component)
         continue;
       if (m.workspaceId && m.workspaceId !== workspace) continue;

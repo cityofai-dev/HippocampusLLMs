@@ -15,21 +15,24 @@ const run = (...args) => {
   return JSON.parse(result.stdout);
 };
 run("init");
+const eventPath = join(dir, "event.json");
 for (const event of dataset.memories) {
-  const path = join(dir, "input.json");
-  writeFileSync(path, JSON.stringify(event));
-  run("remember", "--input", path);
+  writeFileSync(eventPath, JSON.stringify(event));
+  run("remember", "--input", eventPath);
 }
-for (const strategy of [
-  "no memory",
-  "fixed instruction file",
-  "selective recall",
-]) {
+const strategies = ["no memory", "fixed instruction file"];
+for (const mode of ["lexical", "hybrid", "vector"]) {
+  run("config", "preset", mode);
+  strategies.push(mode);
+}
+for (const strategy of strategies) {
   let hit = 0,
     total = 0,
     expected = 0,
     cost = 0,
-    stale = 0;
+    stale = 0,
+    irrelevantTasks = 0,
+    irrelevantFalsePositives = 0;
   const start = performance.now();
   for (const task of dataset.tasks) {
     const selected =
@@ -37,14 +40,19 @@ for (const strategy of [
         ? []
         : strategy === "fixed instruction file"
           ? dataset.memories
-          : run("recall", task.query).memories;
+          : run("recall", task.query, "--budget", "1500").memories;
     expected += task.relevant.length;
     for (const record of selected) {
       const index = dataset.memories.findIndex(
-        (m) => m.content === record.content,
+        (memory) => memory.content === record.content,
       );
-      hit += Number(task.relevant.includes(index));
+      const relevant = task.relevant.includes(index);
+      hit += Number(relevant);
       stale += Number(Boolean(dataset.memories[index]?.expiresAt));
+    }
+    if (task.relevant.length === 0) {
+      irrelevantTasks += 1;
+      irrelevantFalsePositives += Number(selected.length > 0);
     }
     total += selected.length;
     cost += Math.ceil(Buffer.byteLength(JSON.stringify(selected)) / 3);
@@ -55,9 +63,12 @@ for (const strategy of [
       precision: total ? hit / total : 0,
       recall: expected ? hit / expected : 0,
       staleRate: total ? stale / total : 0,
+      irrelevantFalsePositiveRate: irrelevantTasks
+        ? irrelevantFalsePositives / irrelevantTasks
+        : 0,
       contextEstimate: cost,
-      latencyMs: performance.now() - start,
-      taskOutcomes: "not measured; retrieval-only evaluation, no model used",
+      latencyMs: Math.round(performance.now() - start),
+      taskOutcomes: "retrieval fixture only; no agent model used",
     }),
   );
 }

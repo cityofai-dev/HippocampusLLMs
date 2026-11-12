@@ -2,23 +2,78 @@
   "memories": [
     {
       "kind": "decision",
-      "content": "Refresh token rotation requires a transaction"
+      "content": "Refresh token rotation requires a serializable database transaction and locks the refresh token row"
+    },
+    {
+      "kind": "constraint",
+      "content": "SQLite writes use a bounded busy timeout of 2.5 seconds"
+    },
+    {
+      "kind": "procedure",
+      "content": "Use CSS grid auto placement for the responsive card layout"
+    },
+    {
+      "kind": "episode",
+      "content": "An expired refresh token implementation reused an unsafe in-memory cache",
+      "expiresAt": "2000-01-01T00:00:00.000Z"
     },
     {
       "kind": "decision",
-      "content": "SQLite locking uses bounded busy timeouts"
+      "content": "In API v2 refresh token rotation uses compare-and-swap and does not open a database transaction"
     },
-    { "kind": "decision", "content": "CSS layout uses grid columns" },
     {
-      "kind": "episode",
-      "content": "Refresh token rotation once used an unsafe cache",
-      "expiresAt": "2000-01-01T00:00:00.000Z"
+      "kind": "constraint",
+      "content": "Never persist bearer tokens or private credentials in project memory"
+    },
+    {
+      "kind": "procedure",
+      "content": "Database migration steps run in maintenance mode and verify imported record counts"
+    },
+    {
+      "kind": "decision",
+      "content": "Cache invalidation happens immediately after a successful profile update"
+    },
+    {
+      "kind": "correction",
+      "content": "Correction: profile cache invalidation is delayed until the next request"
+    },
+    {
+      "kind": "task",
+      "content": "At the start of an agent session recall project memory, then save verified decisions with evidence"
+    },
+    {
+      "kind": "decision",
+      "content": "Container queries control the responsive settings panel width"
+    },
+    {
+      "kind": "procedure",
+      "content": "The OpenAPI response schema documents nullable pagination metadata"
     }
   ],
   "tasks": [
-    { "query": "refresh token", "relevant": [0] },
-    { "query": "SQLite locking", "relevant": [1] },
-    { "query": "CSS layout", "relevant": [2] },
+    {
+      "query": "refresh token row locking serializable transaction",
+      "relevant": [0]
+    },
+    { "query": "SQLite busy timeout locking", "relevant": [1] },
+    { "query": "CSS grid card auto placement", "relevant": [2] },
+    { "query": "expired unsafe in-memory cache reuse", "relevant": [] },
+    { "query": "API v2 refresh token compare-and-swap", "relevant": [4] },
+    { "query": "secret credentials bearer token retention", "relevant": [5] },
+    {
+      "query": "maintenance mode migration verify imported records",
+      "relevant": [6]
+    },
+    { "query": "profile cache invalidation contradiction", "relevant": [7, 8] },
+    { "query": "remember verified learning at task start", "relevant": [9] },
+    {
+      "query": "container query settings panel responsive width",
+      "relevant": [10]
+    },
+    {
+      "query": "OpenAPI nullable pagination response schema",
+      "relevant": [11]
+    },
     { "query": "gardening flowers", "relevant": [] }
   ]
 }

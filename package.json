@@ -15,7 +15,9 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "evaluate": "node tests/evaluation.mjs",
     "smoke": "npm run build && node scripts/smoke.mjs",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "smoke:published": "node scripts/published-smoke.mjs",
+    "smoke:hosts": "node scripts/host-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "24.10.2",

@@ -213,6 +213,7 @@ test("vector and hybrid modes index existing memories and follow revisions", () 
     run(dir, ["config", "preset", "hybrid"]).retrieval.mode,
     "hybrid",
   );
+  assert.equal(run(dir, ["recall", "gardening flowers"]).memories.length, 0);
   let results = run(dir, ["recall", "refresh token"]);
   assert.equal(results.memories[0].id, old.id);
   assert.match(results.memories[0].reason, /lexical\+vector/);
@@ -220,6 +221,7 @@ test("vector and hybrid modes index existing memories and follow revisions", () 
     run(dir, ["config", "preset", "vector"]).retrieval.mode,
     "vector",
   );
+  assert.equal(run(dir, ["recall", "gardening flowers"]).memories.length, 0);
   results = run(dir, ["recall", "refresh token"]);
   assert.equal(results.memories[0].id, old.id);
   assert.match(results.memories[0].reason, /vector match/);
