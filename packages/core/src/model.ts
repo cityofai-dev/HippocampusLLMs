@@ -48,12 +48,14 @@ export type Memory = {
   recallCount: number;
   relations: Relation[];
   idempotencyKey?: string;
+  captureFingerprint?: string;
   utilityFeedback?: { useful: boolean; observedAt: string }[];
 };
 export type NewMemory = Pick<Memory, "kind" | "content"> &
   Partial<
     Omit<
       Memory,
+      | "captureFingerprint"
       | "id"
       | "schemaVersion"
       | "revision"
@@ -93,6 +95,10 @@ export function makeMemory(projectId: string, rawInput: NewMemory): Memory {
   const input = newMemorySchema.parse(rawInput);
   validateText(input.content);
   assert(
+    Buffer.byteLength(JSON.stringify(input)) <= 32000,
+    "Memory event exceeds 32KB",
+  );
+  assert(
     [
       "decision",
       "constraint",
@@ -114,7 +120,21 @@ export function makeMemory(projectId: string, rawInput: NewMemory): Memory {
     "confirmed memories require evidence",
   );
   const now = new Date().toISOString();
+  const canonical = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(canonical)
+      : v && typeof v === "object"
+        ? Object.fromEntries(
+            Object.entries(v)
+              .filter(([, value]) => value !== undefined)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, value]) => [key, canonical(value)]),
+          )
+        : v;
   return recordSchema.parse({
+    captureFingerprint: createHash("sha256")
+      .update(JSON.stringify(canonical(input)))
+      .digest("hex"),
     id: randomUUID(),
     schemaVersion: 1,
     revision: 1,

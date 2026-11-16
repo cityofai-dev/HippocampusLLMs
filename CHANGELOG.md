@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — host plugins and reviewable memory
+
+Add CLI plugin builds/previews/removal with standalone runtime snapshots; a separate Hermes provider with profile configuration and shared rich tool schemas; pending proposal review with transactional acceptance and stale-target rejection; path evidence snapshots and drift diagnostics; budgeted recall explanations and explicit contradiction links. Add a scripted cross-client lifecycle demonstration and an opt-in live Codex task benchmark. Fix the evaluation preset loop: previously every retrieval label ran in vector mode. Publication remains unauthorized.
+
 ## 0.2.1 — unreleased
 
 Add a shared-token recall relevance guard and expand the deterministic retrieval evaluation to cover paraphrases, near duplicates, conflicts, stale memories and API versions. Add published-package smoke checks to CI and release-artifact validation across the configured operating-system matrix. Local token vectors did not improve paraphrase recall in the evaluation, so semantic embedding and remote vector providers remain deferred.

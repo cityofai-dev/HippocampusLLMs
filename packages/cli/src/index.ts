@@ -1,3 +1,7 @@
+import { z } from "zod";
+import { applicationTools, callApplicationTool } from "../../core/src/tools.js";
+import { projectEvidence } from "../../adapters/src/evidence.js";
+import { pluginAction } from "./plugins.js";
 import { connect } from "../../adapters/src/index.js";
 import { parseArgs } from "node:util";
 import {
@@ -28,6 +32,8 @@ import { providerRegistry } from "../../core/src/providers.js";
 const { positionals: p, values: v } = parseArgs({
   allowPositionals: true,
   options: {
+    output: { type: "string" },
+    explain: { type: "boolean" },
     component: { type: "string" },
     status: { type: "string" },
     pinned: { type: "string" },
@@ -70,7 +76,7 @@ async function main() {
   }
   if (!command || command === "help") {
     console.log(
-      "hippocampus init | config [show|get|set|validate|test] | remember | recall | memories | inspect | revise | forget | doctor | serve | connect",
+      "hippocampus init | config [show|get|set|validate|test] | remember | recall | memories | inspect | revise | forget | doctor | serve | connect | plugin build/remove HOST | propose | inbox | review | tools | call",
     );
     return;
   }
@@ -278,9 +284,26 @@ async function main() {
     );
     return;
   }
+  if (command === "plugin") {
+    output(
+      pluginAction(
+        p[1] ?? "",
+        p[2] ?? "",
+        base,
+        v.output,
+        v["dry-run"] ?? false,
+      ),
+    );
+    return;
+  }
   const store = new SqliteStore(database(base, c));
   if (c.retrieval.mode !== "lexical") store.enableLocalVectors();
-  const service = new Service(store, c.projectId, c.retrieval.mode);
+  const service = new Service(
+    store,
+    c.projectId,
+    c.retrieval.mode,
+    projectEvidence(base),
+  );
   if (command === "serve") {
     if (typeof v.project !== "string" || !isAbsolute(v.project))
       throw Error("serve requires an absolute --project path");
@@ -295,6 +318,43 @@ async function main() {
   }
   try {
     switch (command) {
+      case "tools":
+        output(
+          Object.entries(applicationTools(service)).map(([name, tool]) => ({
+            name,
+            description: name.replace("hippocampus_", "") + " project memory",
+            parameters: z.toJSONSchema(tool.schema),
+          })),
+        );
+        break;
+      case "call": {
+        if (!v.input) throw Error("call TOOL requires --input JSON_FILE");
+        const raw = readFileSync(resolve(v.input), "utf8");
+        if (Buffer.byteLength(raw) > 32000) throw Error("Input exceeds 32KB");
+        output(callApplicationTool(service, p[1] ?? "", JSON.parse(raw)));
+        break;
+      }
+      case "propose": {
+        if (!v.input) throw Error("propose requires --input JSON_FILE");
+        const raw = readFileSync(resolve(v.input), "utf8");
+        if (Buffer.byteLength(raw) > 32000) throw Error("Input exceeds 32KB");
+        output(service.propose(JSON.parse(raw)));
+        break;
+      }
+      case "inbox":
+        output(service.inbox());
+        break;
+      case "review":
+        output(
+          p[1] === "inspect" || v["dry-run"]
+            ? service.proposal(p[2] ?? "")
+            : service.review(
+                p[2] ?? "",
+                p[1] as "accept" | "reject",
+                Number(v["expected-revision"]),
+              ),
+        );
+        break;
       case "config":
         if (p[1] !== "test") throw Error("Unknown config command");
         output({
@@ -330,6 +390,7 @@ async function main() {
             v.environment,
             v.workspace,
             v.component,
+            v.explain,
           ),
         );
         break;
@@ -337,7 +398,10 @@ async function main() {
         output(store.list(c.projectId));
         break;
       case "inspect":
-        output(service.inspect(p[1] ?? ""));
+        output({
+          ...service.inspect(p[1] ?? ""),
+          evidenceFreshness: service.freshness(p[1] ?? ""),
+        });
         break;
       case "revise":
         output(

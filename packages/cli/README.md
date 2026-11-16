@@ -110,7 +110,7 @@ Tell the agent when to use memory, for example:
 
 **Connecting MCP makes tools available; it does not trigger capture or recall on its own.** Claude Code's isolated user-scoped configuration has passed a live stdio health check. Codex's isolated configuration is recognized as enabled; its list command does not invoke the server, so a live Codex tool call remains unverified. The server has also been exercised with two independent MCP SDK clients.
 
-The server offers six tools: `hippocampus_recall`, `hippocampus_remember`, `hippocampus_inspect`, `hippocampus_revise`, `hippocampus_forget` and `hippocampus_feedback`. Clients without MCP can call the same services through CLI JSON output.
+The server offers nine tools: `hippocampus_recall`, `hippocampus_remember`, `hippocampus_inspect`, `hippocampus_revise`, `hippocampus_forget` `hippocampus_feedback`, `hippocampus_propose`, `hippocampus_inbox` and `hippocampus_review`. Clients without MCP can call the same services through CLI JSON output.
 
 For another MCP client, configure a stdio launch command with an **absolute project path**:
 
@@ -120,6 +120,24 @@ args: /absolute/path/HippocampusLLMs/packages/cli/dist/index.js serve --transpor
 ```
 
 Express `args` as separate strings in your client's configuration. The server never relies on the client's working directory. Restart it after changing project configuration.
+
+See [Hermes integration and local Claude/Codex plugins](docs/integrations-plugins.md) for the separate Hermes memory provider, validated MCP connection and project-bound plugin packaging.
+
+## Reviewable memory and plugin packages
+
+```bash
+hippocampus plugin build claude --project "/absolute/path/my-project" --dry-run
+hippocampus plugin build claude --project "/absolute/path/my-project"
+hippocampus plugin build codex --project "/absolute/path/my-project"
+hippocampus inbox --project "/absolute/path/my-project"
+hippocampus recall "refresh token policy" --explain --budget 1500
+```
+
+Plugin builds include a standalone runtime snapshot; they do not depend on the source checkout. They preview installation instructions and leave client settings unchanged. [Plugin setup and removal](docs/integrations-plugins.md) explains the explicit installation step and Hermes profile configuration.
+
+Agents can submit a structured `propose --input proposal.json` event for review. Preview with `review inspect ID`, then use `review accept ID --expected-revision 1` or reject it. Pending proposals stay out of recall; acceptance checks the target memory revision transactionally. The inbox also shows changed/missing path evidence and explicit contradiction links. See [review and recall](docs/review-and-recall.md) for examples and limits.
+
+Run `npm run demo:cross-agent` from source for a repeatable capture, fresh-session recall, evidence drift, correction and forgetting example. It uses scripted MCP clients with the generated Claude/Codex launch configurations; model-driven host behavior is not claimed. `npm run evaluate:agents` previews the no-memory/fixed-instruction/selective-recall task benchmark without model calls. [Evaluation instructions](docs/agent-evaluation.md) describe opting into actual Codex model runs.
 
 ## Configuration
 
@@ -183,25 +201,28 @@ The database path resolves relative to `.hippocampus/config.json`. Configuration
 | Vector index            | SQLite local vectors   | Qdrant, pgvector         |
 | Embeddings              | Local token hashing    | Semantic model providers |
 
-The canonical store owns records and revisions. A retrieval index selects records; it is not the authoritative store. Local vectors are 256-dimensional hashed token counts with cosine similarity. They run offline and are **not semantic language-model embeddings**. Hybrid mode combines lexical and vector candidates by reciprocal rank. A shared-token relevance guard filters weak matches and hash collisions. On the current 24-task synthetic evaluation, lexical, hybrid and local token-vector modes tie; none recall the paraphrase cases, so these vectors have not shown a quality improvement on that set. Qdrant, pgvector, PostgreSQL and semantic embedding providers are planned and cannot be selected.
+The canonical store owns records and revisions. A retrieval index selects records; it is not the authoritative store. Local vectors are 256-dimensional hashed token counts with cosine similarity. They run offline and are **not semantic language-model embeddings**. Hybrid mode combines lexical and vector candidates by reciprocal rank. A shared-token relevance guard filters weak matches and hash collisions. On the corrected 24-task synthetic evaluation, lexical and hybrid modes reach 0.864 recall versus 0.818 for local token vectors; local token vectors have not shown a quality improvement. Qdrant, pgvector, PostgreSQL and semantic embedding providers are planned and cannot be selected.
 
 ## Command reference
 
-| Command                                  | Purpose                                                               |
-| ---------------------------------------- | --------------------------------------------------------------------- |
-| `init`                                   | Initialize project identity, config and database                      |
-| `config`                                 | Preview and edit project configuration                                |
-| `config show/get/set/validate/test`      | Manage configuration without the wizard                               |
-| `remember`                               | Record a decision, constraint, episode, procedure, correction or task |
-| `recall`                                 | Retrieve relevant memories within a budget                            |
-| `memories --json`                        | List project records                                                  |
-| `inspect ID --json`                      | Show a complete record                                                |
-| `revise ID --expected-revision N`        | Change content, status, pin or expiry                                 |
-| `forget ID`                              | Remove a record and content-bearing derived records                   |
-| `doctor`                                 | Show project and provider information                                 |
-| `connect` / `disconnect`                 | Manage Claude Code or Codex project settings                          |
-| `serve --transport stdio --project PATH` | Serve the same project through MCP                                    |
-| `consolidate --dry-run`                  | Preview expiry reviews                                                |
+| Command                                  | Purpose                                             |
+| ---------------------------------------- | --------------------------------------------------- |
+| `init`                                   | Initialize project identity, config and database    |
+| `config`                                 | Preview and edit project configuration              |
+| `config show/get/set/validate/test`      | Manage configuration without the wizard             |
+| `remember`                               | Record a concise project memory                     |
+| `recall`                                 | Retrieve relevant memories within a budget          |
+| `memories --json`                        | List project records                                |
+| `inspect ID --json`                      | Show a complete record and evidence freshness       |
+| `revise ID --expected-revision N`        | Correct content or lifecycle metadata               |
+| `forget ID`                              | Remove a record and content-bearing derived records |
+| `doctor`                                 | Show project and provider information               |
+| `connect` / `disconnect`                 | Manage Claude Code or Codex project settings        |
+| `serve --transport stdio --project PATH` | Serve the same project through MCP                  |
+| `consolidate --dry-run`                  | Preview expiry reviews                              |
+| `plugin build/remove HOST`               | Build or remove owned Claude/Codex plugin artifacts |
+| `propose --input FILE` / `inbox`         | Submit and list reviewable memory candidates        |
+| `review inspect/accept/reject ID`        | Preview, accept or reject a proposal                |
 
 All commands return JSON results, with diagnostics on stderr. Use `--status archived` with `revise` to hide an inactive memory from normal recall. The supported statuses are `active`, `superseded`, `archived` and `expired`.
 
@@ -209,7 +230,7 @@ All commands return JSON results, with diagnostics on stderr. Use `--status arch
 
 Memory files stay local. No telemetry, remote memory provider, model extraction or automatic transcript capture is enabled. Obvious credential patterns are rejected, but pattern checks are imperfect; review content before storing it. Treat recalled content as historical data, not an instruction to execute.
 
-`forget` removes the record, its FTS entry and content-bearing derived records. SQLite WAL files, backups or filesystem snapshots may retain old bytes. Export/import, automatic store migration, semantic consolidation and evidence freshness checks are not implemented. Recall uses the selected lexical, local vector or hybrid mode and a conservative estimate of serialized output size, not a model tokenizer. Local token vectors mainly match shared terms and can collide; they do not understand meaning. See [the validation record](docs/validation.md) for the synthetic evaluation results and platform verification status.
+`forget` removes the record, its FTS entry and content-bearing derived records. SQLite WAL files, backups or filesystem snapshots may retain old bytes. Export/import, automatic store migration, and semantic consolidation are not implemented. Relative path evidence under 1 MiB is snapshotted and checked for changes; commit, symbol and external evidence verification remain unsupported. Recall uses the selected lexical, local vector or hybrid mode and a conservative estimate of serialized output size, not a model tokenizer. Local token vectors mainly match shared terms and can collide; they do not understand meaning. See [the validation record](docs/validation.md) for the synthetic evaluation results and platform verification status.
 
 If a command says the project is not initialized, run `init` in the target project. If recall is empty, check the query, status, expiry and required applicability context. If an update returns `REVISION_CONFLICT`, inspect the latest revision before retrying.
 

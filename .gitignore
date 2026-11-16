@@ -8,3 +8,5 @@ dist/
 .hippocampus/*.bak
 .env
 .env.*
+
+plugins/hermes/__pycache__/

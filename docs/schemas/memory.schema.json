@@ -168,6 +168,7 @@
         "additionalProperties": false
       }
     },
+    "captureFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "idempotencyKey": { "type": "string", "maxLength": 200 },
     "utilityFeedback": {
       "maxItems": 100,

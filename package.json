@@ -17,7 +17,10 @@
     "smoke": "npm run build && node scripts/smoke.mjs",
     "format": "prettier --write .",
     "smoke:published": "node scripts/published-smoke.mjs",
-    "smoke:hosts": "node scripts/host-smoke.mjs"
+    "smoke:hosts": "node scripts/host-smoke.mjs",
+    "package:plugins": "node scripts/package-plugins.mjs",
+    "demo:cross-agent": "npm run build && node examples/cross-agent.mjs",
+    "evaluate:agents": "node scripts/agent-benchmark.mjs"
   },
   "devDependencies": {
     "@types/node": "24.10.2",

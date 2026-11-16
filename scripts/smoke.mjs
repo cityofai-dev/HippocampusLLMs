@@ -68,6 +68,40 @@ const recalled = JSON.parse(
   ),
 );
 assert.equal(recalled.memories[0].id, memory.id);
+const plugin = join(dir, "installed plugin");
+const preview = JSON.parse(
+  command(
+    process.execPath,
+    [
+      bin,
+      "plugin",
+      "build",
+      "codex",
+      "--project",
+      project,
+      "--output",
+      plugin,
+      "--dry-run",
+    ],
+    dir,
+  ),
+);
+assert.equal(preview.modifiesClientSettings, false);
+const built = JSON.parse(
+  command(
+    process.execPath,
+    [bin, "plugin", "build", "codex", "--project", project, "--output", plugin],
+    dir,
+  ),
+);
+const independent = JSON.parse(
+  command(
+    process.execPath,
+    [built.runtimePath, "inspect", memory.id, "--project", project],
+    dir,
+  ),
+);
+assert.equal(independent.content, memory.content);
 console.log(
-  "Packed package installed outside monorepo; init, remember and recall passed.",
+  "Packed package installed outside monorepo; memory round trip, plugin preview/build and standalone runtime passed.",
 );

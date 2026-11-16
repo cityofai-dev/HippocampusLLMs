@@ -7,3 +7,5 @@ Canonical project identity is separate from the optional workspace scope in the 
 Initial tradeoff: use Node 24's built-in synchronous SQLite driver to avoid native installation scripts. Operations are bounded and local; expensive remote work is outside the implementation. Forward migrations reject newer schemas. SQLite busy waits last at most 2.5 seconds.
 
 Release gates still outstanding include origin explanations, full host capability detection, advanced lifecycle operations, cancellation tests, interrupted migrations and contention tests, copied identity detection and platform matrix verification. The current implementation is a functional initial vertical slice, not completion of every AGENTS.md acceptance criterion.
+
+Plugin packages now carry a bundled runtime snapshot in the target project's ignored state directory. Pending review drafts use migration 3; acceptance is one transaction with optimistic target checks. CLI, MCP and Hermes share generated application tool schemas. Evidence freshness is injected through a bounded filesystem adapter; hashing does not promote verification. See decisions 004 and the review guide for limits.

@@ -20,6 +20,7 @@ mkdirSync("docs/schemas", { recursive: true });
 for (const [name, entry, exportName] of [
   ["config", "packages/cli/src/config.ts", "schema"],
   ["memory", "packages/core/src/schema.ts", "recordSchema"],
+  ["proposal", "packages/core/src/schema.ts", "proposalSchema"],
 ]) {
   const outfile = `packages/cli/dist/${name}-schema.mjs`;
   await build({
@@ -39,3 +40,20 @@ for (const [name, entry, exportName] of [
   writeFileSync(`packages/cli/dist/${name}.schema.json`, json);
   unlinkSync(outfile);
 }
+
+// Bundle runtime dependencies so generated host plugins do not depend on the checkout.
+await build({
+  entryPoints: ["packages/cli/src/index.ts"],
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  outfile: "packages/cli/dist/plugin-runtime.mjs",
+  banner: {
+    js: 'import { createRequire as __hippoCreateRequire } from "node:module"; const require = __hippoCreateRequire(import.meta.url);',
+  },
+});
+copyFileSync(
+  "plugins/shared/project-memory/SKILL.md",
+  "packages/cli/dist/project-memory.md",
+);
+copyFileSync("LICENSE", "packages/cli/dist/LICENSE");

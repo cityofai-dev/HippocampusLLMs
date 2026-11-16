@@ -28,7 +28,7 @@ test("two MCP clients share durable memory and report tool errors", async () => 
   const second = await connect();
   try {
     const tools = await first.listTools();
-    assert.equal(tools.tools.length, 6);
+    assert.equal(tools.tools.length, 9);
     const result = await first.callTool({
       name: "hippocampus_remember",
       arguments: {

@@ -1,5 +1,18 @@
 import type { Memory } from "./model.js";
+export type Proposal = import("zod").infer<
+  typeof import("./schema.js").proposalSchema
+>;
+export interface EvidenceReader {
+  check(evidence: import("./model.js").Evidence): {
+    state: "current" | "changed" | "missing" | "untracked" | "unsupported";
+    currentHash?: string;
+  };
+}
 export interface MemoryStoreProvider {
+  atomic<T>(fn: () => T): T;
+  proposals(projectId: string): Proposal[];
+  putProposal(proposal: Proposal): Proposal;
+  removeProposal(projectId: string, id: string): void;
   readonly name: string;
   get(projectId: string, id: string): Memory | undefined;
   list(projectId: string): Memory[];

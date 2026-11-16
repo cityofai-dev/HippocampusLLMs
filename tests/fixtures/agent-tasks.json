@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "tasks": [
+    {
+      "id": "refresh-retry-v3",
+      "query": "refresh API v3 retry policy attempts rate limit",
+      "prompt": "Implement shouldRetry(status, attempt) in policy.mjs for the current refresh API v3. attempt is the number of retries already performed. Preserve the exported function signature.",
+      "starter": "export function shouldRetry(status, attempt) { return true; }\n",
+      "memories": [
+        {
+          "kind": "constraint",
+          "content": "Refresh API v3 retry policy: retry HTTP 429 while attempt is less than 2; never retry HTTP 401 or other statuses",
+          "verification": "observed"
+        },
+        {
+          "kind": "episode",
+          "content": "Refresh API v2 retry policy: retry HTTP 401 while attempt is less than 4",
+          "status": "superseded"
+        },
+        {
+          "kind": "decision",
+          "content": "Billing webhook idempotency keys use the invoice event ID"
+        }
+      ],
+      "relevant": [0],
+      "cases": [
+        [429, 0, true],
+        [429, 1, true],
+        [429, 2, false],
+        [401, 0, false],
+        [500, 0, false]
+      ],
+      "repeatFailureCases": [3]
+    }
+  ]
+}

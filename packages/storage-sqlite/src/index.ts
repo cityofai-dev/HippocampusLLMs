@@ -1,8 +1,11 @@
-import { recordSchema } from "../../core/src/schema.js";
+import { proposalSchema, recordSchema } from "../../core/src/schema.js";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { MemoryStoreProvider } from "../../core/src/providers.js";
+import type {
+  MemoryStoreProvider,
+  Proposal,
+} from "../../core/src/providers.js";
 import { AppError, type Memory } from "../../core/src/model.js";
 import {
   localVector,
@@ -28,7 +31,7 @@ export class SqliteStore implements MemoryStoreProvider {
     const version = (
       this.db.prepare("PRAGMA user_version").get() as { user_version: number }
     ).user_version;
-    if (version > 2)
+    if (version > 3)
       throw new AppError(
         "INVALID_CONFIG",
         "Database schema is newer than this CLI",
@@ -55,6 +58,46 @@ export class SqliteStore implements MemoryStoreProvider {
         );
         PRAGMA user_version=2; COMMIT;`);
     }
+    if (version < 3)
+      this.db.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE IF NOT EXISTS proposals (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, body TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS proposals_project ON proposals(project_id);
+      PRAGMA user_version=3; COMMIT;`);
+  }
+  private inTransaction = false;
+  atomic<T>(fn: () => T): T {
+    return this.transaction(fn);
+  }
+  proposals(projectId: string): Proposal[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT body FROM proposals WHERE project_id=? ORDER BY rowid LIMIT 1000",
+        )
+        .all(projectId) as Row[]
+    ).map((r) => proposalSchema.parse(JSON.parse(r.body)));
+  }
+  putProposal(proposal: Proposal): Proposal {
+    return this.transaction(() => {
+      proposalSchema.parse(proposal);
+      const count = this.db
+        .prepare("SELECT count(*) AS count FROM proposals WHERE project_id=?")
+        .get(proposal.projectId) as { count: number };
+      if (count.count >= 1000)
+        throw new AppError(
+          "INVALID_INPUT",
+          "Review queue is full; review pending proposals before adding more",
+        );
+      this.db
+        .prepare("INSERT INTO proposals(id,project_id,body) VALUES(?,?,?)")
+        .run(proposal.id, proposal.projectId, JSON.stringify(proposal));
+      return proposal;
+    });
+  }
+  removeProposal(projectId: string, id: string): void {
+    this.db
+      .prepare("DELETE FROM proposals WHERE project_id=? AND id=?")
+      .run(projectId, id);
   }
   enableLocalVectors(): void {
     this.transaction(() => {
@@ -88,8 +131,10 @@ export class SqliteStore implements MemoryStoreProvider {
     this.vectorEnabled = true;
   }
   private transaction<T>(fn: () => T): T {
+    if (this.inTransaction) return fn();
     try {
       this.db.exec("BEGIN IMMEDIATE");
+      this.inTransaction = true;
       const result = fn();
       this.db.exec("COMMIT");
       return result;
@@ -100,6 +145,8 @@ export class SqliteStore implements MemoryStoreProvider {
       if (String(error).includes("SQLITE_BUSY"))
         throw new AppError("STORE_BUSY", "SQLite is busy; retry shortly");
       throw error;
+    } finally {
+      this.inTransaction = false;
     }
   }
   private find(id: string): Memory | undefined {
@@ -137,6 +184,9 @@ export class SqliteStore implements MemoryStoreProvider {
         if (row) {
           const prior = recordSchema.parse(JSON.parse(row.body));
           if (
+            (prior.captureFingerprint &&
+              memory.captureFingerprint &&
+              prior.captureFingerprint !== memory.captureFingerprint) ||
             prior.kind !== memory.kind ||
             prior.content !== memory.content ||
             JSON.stringify(prior.evidence) !==
@@ -241,6 +291,13 @@ export class SqliteStore implements MemoryStoreProvider {
             removed.add(m.id);
             changed = true;
           }
+      }
+      for (const proposal of this.proposals(projectId)) {
+        if (
+          (proposal.input.targetId && removed.has(proposal.input.targetId)) ||
+          proposal.input.memory.relations?.some((r) => removed.has(r.targetId))
+        )
+          this.removeProposal(projectId, proposal.id);
       }
       const derived = all.filter((m) => removed.has(m.id) && m.id !== id);
       for (const m of derived) {

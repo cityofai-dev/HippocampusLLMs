@@ -20,12 +20,20 @@ for (const event of dataset.memories) {
   writeFileSync(eventPath, JSON.stringify(event));
   run("remember", "--input", eventPath);
 }
-const strategies = ["no memory", "fixed instruction file"];
-for (const mode of ["lexical", "hybrid", "vector"]) {
-  run("config", "preset", mode);
-  strategies.push(mode);
-}
+const strategies = [
+  "no memory",
+  "fixed instruction file",
+  "lexical",
+  "hybrid",
+  "vector",
+];
 for (const strategy of strategies) {
+  if (["lexical", "hybrid", "vector"].includes(strategy)) {
+    run("config", "preset", strategy);
+    const effective = run("config", "show");
+    if (effective.retrieval.mode !== strategy)
+      throw Error("Evaluation mode mismatch");
+  }
   let hit = 0,
     total = 0,
     expected = 0,
@@ -72,6 +80,9 @@ for (const strategy of strategies) {
   console.log(
     JSON.stringify({
       strategy,
+      configuredMode: ["lexical", "hybrid", "vector"].includes(strategy)
+        ? run("config", "show").retrieval.mode
+        : null,
       precision: total ? hit / total : null,
       recall: expected ? hit / expected : 0,
       staleRate: total ? stale / total : 0,

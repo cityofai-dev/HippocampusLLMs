@@ -64,6 +64,10 @@ export const recordSchema = z
     lastRecalledAt: z.string().datetime().optional(),
     recallCount: z.number().int().nonnegative(),
     relations: z.array(relationSchema).max(30),
+    captureFingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     idempotencyKey: z.string().max(200).optional(),
     utilityFeedback: z
       .array(
@@ -84,6 +88,7 @@ export const recordSchema = z
 export const newMemorySchema = z
   .object(recordSchema.shape)
   .omit({
+    captureFingerprint: true,
     id: true,
     schemaVersion: true,
     revision: true,
@@ -96,4 +101,28 @@ export const newMemorySchema = z
   })
   .partial()
   .required({ kind: true, content: true })
+  .strict();
+
+export const proposalInputSchema = z
+  .object({
+    memory: newMemorySchema,
+    targetId: z.string().uuid().optional(),
+    expectedRevision: z.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((p, ctx) => {
+    if (Boolean(p.targetId) !== Boolean(p.expectedRevision))
+      ctx.addIssue({
+        code: "custom",
+        message: "targetId and expectedRevision must be supplied together",
+      });
+  });
+export const proposalSchema = z
+  .object({
+    id: z.string().uuid(),
+    projectId: z.string().uuid(),
+    revision: z.literal(1),
+    createdAt: z.string().datetime(),
+    input: proposalInputSchema,
+  })
   .strict();
