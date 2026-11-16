@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { Service } from "../../core/src/service.js";
 import { applicationTools } from "../../core/src/tools.js";
 export async function serve(service: Service, check: () => void = () => {}) {
-  const server = new McpServer({ name: "hippocampus", version: "0.2.1" });
+  const server = new McpServer({ name: "hippocampus", version: "0.3.0" });
   for (const [name, tool] of Object.entries(applicationTools(service))) {
     server.registerTool(
       name,
