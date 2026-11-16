@@ -4,7 +4,7 @@
 
 HippocampusLLMs is local project memory for coding agents. Save a decision, constraint, correction or verified finding once; retrieve it when a later task needs it. Memories live in your project's SQLite database and are available through the `hippocampus` command and a stdio MCP server.
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Connect an agent](#connect-an-agent) · [Configuration](#configuration) · [Commands](#command-reference)
+[Quickstart](#quickstart) · [Features](#features) · [Connectors](#connectors) · [Configuration](#configuration) · [Commands](#command-reference)
 
 ## Quickstart
 
@@ -43,6 +43,16 @@ npx --no-install hippocampus forget MEMORY_ID
 ```
 
 The examples use a project-local installation. If you linked the package globally from source, use `hippocampus` in place of `npx --no-install hippocampus`. Add `--project /absolute/path/my-project` when running a command outside the project directory.
+
+## Features
+
+- **Project-scoped memory:** SQLite stores concise decisions, constraints, corrections, episodes and procedures with provenance, applicability and revisions. Separate local clients can share one initialized project's database.
+- **Selective recall:** SQLite FTS5 lexical search is the default. Optional offline local token vectors support vector and hybrid modes. Results obey project, environment, workspace and component restrictions and an estimated output budget; unrelated queries may return nothing.
+- **Review before acceptance:** Agents can propose a new memory or a correction. Pending proposals stay out of recall until explicitly accepted, and corrections reject stale target revisions.
+- **Evidence and explanations:** Supported project-relative file evidence gets a content hash at capture. `inspect` and the inbox flag changed or missing files; `recall --explain` reports bounded ranking and exclusion reasons. A changed file asks for review rather than proving the memory wrong.
+- **Local interoperability:** The CLI and stdio MCP server use the same memory services. Claude Code and Codex can connect through direct MCP settings or generated local plugins; Hermes can connect over MCP or use the separate native provider.
+
+Capture is explicit by default. No transcripts are stored automatically, and there is no model extraction, telemetry or remote service in the local setup.
 
 ## Why use project memory?
 
@@ -93,51 +103,105 @@ npx --no-install hippocampus recall "refresh token concurrency" --environment pr
 
 A restricted memory is excluded when recall lacks the matching environment, workspace or component. A confirmed memory requires evidence references. Recall does not recheck evidence or promote a hypothesis to confirmed status. Hypotheses expire after 30 days unless given an explicit expiry.
 
-## Connect an agent
+## Connectors
 
-Initialize the project first. Then preview and install a project MCP connection:
+Initialize the target project before connecting a client. Every launch must include its **absolute** `--project` path, including when the project path contains spaces. A connector exposes the same local database; it does not synchronize machines or grant automatic access to conversation transcripts.
+
+| Client            | Connection options                                                         | Recall and capture trigger                                                                                                          | Verified scope                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Claude Code       | Project MCP settings via `connect claude`, or a generated local plugin     | Manual or agent-instructed; the plugin includes a memory skill                                                                      | MCP health check and plugin manifest validation on macOS                                                            |
+| Codex             | Project/user MCP settings via `connect codex`, or a generated local plugin | Manual or agent-instructed; the plugin includes a memory skill                                                                      | MCP entry recognized and plugin installed in isolated configuration on macOS; live model-driven tool use unverified |
+| Hermes            | Profile MCP server, or the separate native memory provider                 | MCP is manual or agent-instructed; native provider prefetches bounded recall for incoming queries and offers explicit capture tools | Native provider and MCP smoke checks on a local Hermes installation                                                 |
+| Other MCP clients | Configure the stdio command and argument array below                       | Client-dependent; no automatic trigger is assumed                                                                                   | Two independent MCP SDK sessions exercised; other hosts unverified                                                  |
+| CLI-only agents   | Invoke `hippocampus ... --json` or `hippocampus call TOOL --input FILE`    | Agent-instructed                                                                                                                    | Same local application services                                                                                     |
+
+### Claude Code and Codex: direct MCP connection
+
+Preview the exact configuration change, then connect the desired host:
 
 ```bash
-npx --no-install hippocampus connect claude --dry-run
-npx --no-install hippocampus connect claude
+npx --no-install hippocampus connect claude --project "/absolute/path/my-project" --dry-run
+npx --no-install hippocampus connect claude --project "/absolute/path/my-project"
+npx --no-install hippocampus connect codex --project "/absolute/path/my-project" --dry-run
+npx --no-install hippocampus connect codex --project "/absolute/path/my-project"
 ```
 
-For Codex, replace `claude` with `codex`. These adapters preserve unrelated client settings, make a backup and can remove the settings they own with `hippocampus disconnect claude` or `hippocampus disconnect codex`.
+Project scope writes Claude's `.mcp.json` or Codex's `.codex/config.toml` in the target project. Unrelated entries are preserved and an existing settings file gets a `.hippocampus.bak` backup. The adapter refuses an existing `hippocampus` entry it does not own. Restart the client after connecting. To remove owned settings, run `npx --no-install hippocampus disconnect claude --project "/absolute/path/my-project"` or substitute `codex`; memories remain in the project database. `--scope user` is explicit: Codex can write its user config, while Claude returns a manual `claude mcp add` argument array to review and run yourself.
 
-Tell the agent when to use memory, for example:
+### Claude Code and Codex: local plugin packages
+
+Plugins add a small memory skill alongside the MCP server. Building a plugin creates files only; it does not install the plugin into a client. Build one host at a time and inspect the returned installation command:
+
+```bash
+npx --no-install hippocampus plugin build claude --project "/absolute/path/my-project" --dry-run
+npx --no-install hippocampus plugin build claude --project "/absolute/path/my-project"
+claude --plugin-dir "/absolute/path/my-project/.hippocampus/plugins/claude"
+
+npx --no-install hippocampus plugin build codex --project "/absolute/path/my-project" --dry-run
+npx --no-install hippocampus plugin build codex --project "/absolute/path/my-project"
+codex plugin marketplace add "/absolute/path/my-project/.hippocampus/plugins/codex"
+codex plugin add hippocampus@hippocampus-local
+```
+
+The generated runtime is snapshotted under the target project's ignored `.hippocampus/plugin-runtimes/`, so it does not depend on the source checkout. Keep the project path and recorded Node executable available. The Claude `--plugin-dir` flag applies to that invocation; Codex plugin installation changes its client configuration. Disconnect the client first, then preview `npx --no-install hippocampus plugin remove HOST --project "/absolute/path/my-project" --dry-run` before removing owned artifacts. See [plugin setup, removal and tested versions](docs/integrations-plugins.md). Use either the plugin or the direct MCP connection for one host/project to avoid duplicate tool surfaces.
+
+### Hermes: MCP or native memory provider
+
+For MCP, add a `hippocampus` entry to the active Hermes profile's `mcp_servers` and restart Hermes. For native integration, copy `plugins/hermes` into that profile's `$HERMES_HOME/plugins/hippocampus/`, configure an absolute project and CLI path, then select `memory.provider: hippocampus`. The native provider prefetches at most 1200 estimated tokens for incoming queries and exposes explicit memory tools; it does not mirror Hermes transcripts or built-in personal memory files. These are separate choices. The [Hermes guide](docs/integrations-plugins.md#hermes-mcp-connection) gives exact YAML/JSON examples and removal steps.
+
+### Generic MCP and CLI fallback
+
+Configure a stdio client using separate argument strings (the executable path below assumes a project-local npm installation):
+
+```json
+{
+  "command": "/absolute/path/to/node",
+  "args": [
+    "/absolute/path/my-project/node_modules/@hippocampusllms/cli/dist/index.js",
+    "serve",
+    "--transport",
+    "stdio",
+    "--project",
+    "/absolute/path/my-project"
+  ]
+}
+```
+
+The server uses stdout for MCP protocol traffic and reports diagnostics on stderr. Restart it after project configuration changes. It exposes nine tools: `hippocampus_recall`, `hippocampus_remember`, `hippocampus_inspect`, `hippocampus_revise`, `hippocampus_forget`, `hippocampus_feedback`, `hippocampus_propose`, `hippocampus_inbox` and `hippocampus_review`. CLI-only clients can use `remember`, `recall --json` and the `tools`/`call` JSON interface.
+
+Tell an agent when to use memory, for example:
 
 > Recall project memories relevant to this task before changing the refresh-token code. After verifying a durable decision or fix, record it with its source. Show me conflicting memories before relying on them.
 
-**Connecting MCP makes tools available; it does not trigger capture or recall on its own.** Claude Code's isolated user-scoped configuration has passed a live stdio health check. Codex's isolated configuration is recognized as enabled; its list command does not invoke the server, so a live Codex tool call remains unverified. The server has also been exercised with two independent MCP SDK clients.
+An MCP connection makes tools available; it does not guarantee the agent will call them. No Claude/Codex task hooks or automatic transcript capture are installed.
 
-The server offers nine tools: `hippocampus_recall`, `hippocampus_remember`, `hippocampus_inspect`, `hippocampus_revise`, `hippocampus_forget` `hippocampus_feedback`, `hippocampus_propose`, `hippocampus_inbox` and `hippocampus_review`. Clients without MCP can call the same services through CLI JSON output.
+## Review, evidence and explainable recall
 
-For another MCP client, configure a stdio launch command with an **absolute project path**:
+An agent can submit a structured candidate for review. Save this as `proposal.json`:
 
-```text
-command: node
-args: /absolute/path/HippocampusLLMs/packages/cli/dist/index.js serve --transport stdio --project /absolute/path/my-project
+```json
+{
+  "memory": {
+    "kind": "decision",
+    "content": "Refresh retry policy allows two attempts on HTTP 429",
+    "rationale": "More retries can amplify a rate limit",
+    "verification": "observed",
+    "evidence": [{ "type": "path", "reference": "src/auth/retry.ts" }]
+  }
+}
 ```
-
-Express `args` as separate strings in your client's configuration. The server never relies on the client's working directory. Restart it after changing project configuration.
-
-See [Hermes integration and local Claude/Codex plugins](docs/integrations-plugins.md) for the separate Hermes memory provider, validated MCP connection and project-bound plugin packaging.
-
-## Reviewable memory and plugin packages
 
 ```bash
-hippocampus plugin build claude --project "/absolute/path/my-project" --dry-run
-hippocampus plugin build claude --project "/absolute/path/my-project"
-hippocampus plugin build codex --project "/absolute/path/my-project"
-hippocampus inbox --project "/absolute/path/my-project"
-hippocampus recall "refresh token policy" --explain --budget 1500
+npx --no-install hippocampus propose --input proposal.json
+npx --no-install hippocampus inbox
+npx --no-install hippocampus review inspect PROPOSAL_ID
+npx --no-install hippocampus review accept PROPOSAL_ID --expected-revision 1
+npx --no-install hippocampus recall "refresh retry policy" --explain --budget 1500
 ```
 
-Plugin builds include a standalone runtime snapshot; they do not depend on the source checkout. They preview installation instructions and leave client settings unchanged. [Plugin setup and removal](docs/integrations-plugins.md) explains the explicit installation step and Hermes profile configuration.
+Pending proposals do not enter recall. `review reject PROPOSAL_ID --expected-revision 1` discards one. To propose a correction, include `targetId` and its `expectedRevision` beside `memory`; acceptance checks both the proposal revision and the target's revision in one transaction. The inbox also reports changed or missing path evidence and direct contradiction links. Explain mode shows bounded relevance and filtering reasons without copying excluded contents into diagnostics. [Review and recall details](docs/review-and-recall.md) cover supported evidence, preview commands and limits.
 
-Agents can submit a structured `propose --input proposal.json` event for review. Preview with `review inspect ID`, then use `review accept ID --expected-revision 1` or reject it. Pending proposals stay out of recall; acceptance checks the target memory revision transactionally. The inbox also shows changed/missing path evidence and explicit contradiction links. See [review and recall](docs/review-and-recall.md) for examples and limits.
-
-Run `npm run demo:cross-agent` from source for a repeatable capture, fresh-session recall, evidence drift, correction and forgetting example. It uses scripted MCP clients with the generated Claude/Codex launch configurations; model-driven host behavior is not claimed. `npm run evaluate:agents` previews the no-memory/fixed-instruction/selective-recall task benchmark without model calls. [Evaluation instructions](docs/agent-evaluation.md) describe opting into actual Codex model runs.
+Run `npm run demo:cross-agent` from source for a scripted capture, fresh-session recall, evidence drift, correction and forgetting example. It uses two independent MCP SDK sessions; model-driven host behavior is not claimed. `npm run evaluate:agents` previews the no-memory/fixed-instruction/selective-recall task benchmark without model calls. [Evaluation instructions](docs/agent-evaluation.md) describe opting into actual Codex model runs.
 
 ## Configuration
 
